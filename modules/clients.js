@@ -1,3 +1,5 @@
+module.exports.version = '0.1.0.0'
+
 const { DateTime } = require('luxon')
 const jwt  = require('jsonwebtoken')
 const {v4: uuidv4} = require('uuid')
@@ -12,6 +14,10 @@ function log(msg) {
 
 function getClient(clientId) {
     return clients.find((o) => o.id === clientId)
+}
+
+function getClients() {
+    return clients
 }
 
 function removeClient(clientId) {
@@ -177,3 +183,48 @@ module.exports.provisionClient  = provisionClient
 module.exports.provisionToken   = provisionToken
 module.exports.getClient        = getClient
 module.exports.removeClient     = removeClient
+
+
+function ep_provisionClient(req, res) {
+
+    let details = req.body
+    
+    log(`Provisioning client '${details.id}' for ${req.authenticated.name}`)
+
+    let t = provisionClient(details.id)
+
+    res.status(200)
+    res.send(JSON.stringify({token: t.token}))
+}
+
+function ep_getClients(req, res) {
+
+    if (req.params) {
+
+        let params = req.params
+
+        if (params.clientId) {
+            let c = getClient(params.clientId)
+            if (c) {
+                res.status(200)
+                res.send(JSON.stringify(c))
+                return
+            } else {
+                res.status(204)
+                res.end()
+                return
+            }
+        }
+
+    }
+
+    res.status(200)
+    res.send(JSON.stringify(getClients()))
+}
+
+
+module.exports.endpoints = [
+    {route: '/', method: 'get', handler: ep_getClients},
+    {route: '/provision', method: 'post', handler: ep_provisionClient},
+    {route: '/:clientId', method: 'get', handler: ep_getClients}
+]

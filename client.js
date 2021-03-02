@@ -156,8 +156,8 @@ function connect() {
 
     })
 
-    connection.on('close', () => {
-        log(`Connection to server closed, attempting to reconnect in 30 seconds.`)
+    connection.on('close', (e) => {
+        log(`Connection to server closed, attempting to reconnect in 30 seconds: ${e}`)
         clearInterval(tokenRefresh)
         setTimeout(connect, 30000)
     })

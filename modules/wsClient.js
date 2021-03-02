@@ -1,18 +1,22 @@
 "use strict"
 
 const { DateTime } = require('luxon')
-const jwt  = require('jsonwebtoken')
 const {v4: uuidv4} = require('uuid')
 
+const clients = require('./clients')
+
 var connections = []
-var clients = []
-var tokens = []
 
 function log(msg) {
     console.log(`${DateTime.now()} | ${msg}`)
 }
 
 function verifyReqAuthentication(req) {
+
+    if (req.headers.upgrade && req.headers.upgrade === 'websocket') {
+        return true
+    }
+
     if (!req.authenticated) {
         return false
     }
@@ -26,156 +30,6 @@ function verifyReqAuthentication(req) {
     return true
 
 }
-
-/**
- * Provisions resources for a client with the given clientId.
- * 
- * Calling this function with the ID of an existing client will cause the
- * existing token to be replaced with a new one.
- * 
- * This function returns an object containing a token that the client should
- * use when connecting via WebSocket, the ID of the token and the the token's
- * expiration date/time.
- * 
- * @param {string} clientId - ID to setup client resources for.
- */
-function provisionClient(clientId){
-    
-    let i = clients.findIndex((o) => o.id === clientId)
-
-    let record = null
-
-    if (i !== -1) {
-        record = clients[i]
-    } else {
-        record = {
-            id: clientId,
-            created: DateTime.now()
-        }
-        clients.push(record)
-    }
-
-    let t = provisionToken(clientId)
-
-    record.tokenId = t.id
-    record.tokenExpires = t.expires
-    
-    record.updated = DateTime.now()
-
-    return t
-
-}
-
-/**
- * Provisions a new token for the client with the given clientId.
- * 
- * This function returns an object containing a token that the client should
- * use when connecting via WebSocket, the ID of the token for the client and
- * the expiry date/time of the token.
- * 
- * @param {string} clientId - ID of the client to provision a token for.
- */
-function provisionToken(clientId) {
-
-    let now = DateTime.now()
-    let newTokenId = uuidv4()
-
-    let record = {
-        id: newTokenId,
-        clientId: clientId,
-        tokenIssued: now,
-        tokenExpires: now.plus({days: 30}),
-        secret: uuidv4()
-    }
-
-    let payload = {
-        id: newTokenId,
-        clientId: clientId,
-        iat: Math.round(record.tokenIssued.toSeconds()),
-        exp: Math.round(record.tokenExpires.toSeconds())
-    }
-
-    let token = jwt.sign(payload, record.secret)
-    let encId = Buffer.from(clientId).toString('base64')
-    let signedToken = encId + "." + token
-
-    
-    let i = tokens.findIndex((o) => o.clientId == clientId)
-
-    if (i === -1) {
-        tokens.push(record)
-    } else {
-        tokens.splice(i, 1, record)
-    }
-
-    log (`New token issued for client '${clientId}'.`)
-
-    return { id: newTokenId, expires: record.tokenExpires, token: signedToken }
-}
-
-/**
- * Attempts to verify the validity of a token.
- * 
- * Will return a object with a 'state' field and a data field.
- * 
- * If verification was successful, the state will be 'success' and the object
- * will contain a field 'client' with the client specified by the token.
- * 
- * If verification was unsuccessful, there will be a 'reason' with a shot
- * description of what went wrong.
- * 
- * @param {string} signedToken - The token to verify.
- */
-function verifyToken(signedToken) {
-
-    if ((typeof signedToken) !== 'string') {
-        return { state: 'authenticationfailed', reason: 'Invalid token type.'}
-    }
-
-    const signedTokenRegex = /(?<clientId>[^.]+)\.(?<token>[^.]+\.[^.]+\.[^.]+)/
-    
-    let m = signedToken.match(signedTokenRegex)
-
-    if (!m) {
-        return { state: 'authenticationfailed', reason: 'Invalid token format.'}
-    }
-
-    let clientId = Buffer.from(m.groups.clientId, 'base64').toString()
-
-    let i = tokens.findIndex((o) => o.clientId === clientId)
-
-    if (i === -1) {
-        return { state: 'authenticationFailed', reason: 'No such client.' }
-    }
-
-    let token = tokens[i]
-
-    let t = m.groups.token
-
-    try {
-        jwt.verify(t, token.secret)
-    } catch(e) {
-        return { state: 'authenticationFailed', reason: 'Token unreadable.' }
-    }
-
-    let p = jwt.decode(t, token.secret)
-
-    if (p.clientId != token.clientId) {
-        // Someone is forging tokens.
-        return { state: 'authenticationFailed', reason: 'Token signing mismatch.' }
-    }
-
-    if (p.id != token.id) {
-        // Wrong token provided, probably an old token from a client that has been reprovisioned.
-        return { state: 'authenticationFailed', reason: 'Token ID mismatch.' }
-    }
-
-    let client = clients.find((o) => o.id === token.clientId)
-
-    return { state: 'success', client: client }
-}
-
-
 
 // Temporary list of message handlers. Handlers should be defined as modules and loaded from the 'providers' directory.
 // Provider modules should export a 'version' string and a 'messages' object. Each key on the 'messages' object should
@@ -191,7 +45,7 @@ var providers = {
              * the new token in the field called 'token'.
              */
             'refresh': (message, connection, record) => {
-                let r = provisionToken(record.clientId)
+                let r = clients.provisionToken(record.clientId)
                 connection.send(JSON.stringify({
                     type: 'token.issue',
                     token: r.token,
@@ -210,11 +64,12 @@ var providers = {
                     log (`${capability.name} (${capability.version})`)
                 }
 
-                let client = clients.find((o) => o.id === record.clientId)
+                let client = clients.getClient(record.clientId)
                 client.capabilities = message.capabilities
             }
         }
-    }
+    },
+    'client': clients
 }
 
 function ep_wsConnect (ws, request) {
@@ -271,7 +126,7 @@ function ep_wsConnect (ws, request) {
     ws.on('message', (message) => {
         // First message, assumed to be token.
         if (!record.authenticated) {
-            let r = verifyToken(message)
+            let r = clients.verifyToken(message)
             
             if (r.state !== 'success') {
                 log(`${record.id} failed authentication attempt. state: '${r.state}', reason: ${r.reason}`)
@@ -369,68 +224,7 @@ function ep_wsConnect (ws, request) {
 
 }
 
-
-function ep_provisionClient(req, res) {
-
-    if (!verifyReqAuthentication(req)) {
-        req.status(403)
-        res.end()
-        return
-    }
-
-    let details = req.body
-
-    if (!details.id) {
-        res.status(400)
-        res.end()
-        return
-    }
-    
-    log(`Provisioning client '${details.id}' for ${req.authenticated.name}`)
-
-    let t = provisionClient(details.id)
-
-    res.status(200)
-    res.send(JSON.stringify({token: t.token}))
-}
-
-function ep_getClients(req, res) {
-
-    if (!verifyReqAuthentication(req)) {
-        req.status = 403
-        res.end()
-        return
-    }
-
-    if (req.params) {
-
-        let params = req.params
-
-        if (params.clientId) {
-            let c = clients.find((o) => o.id === params.clientId)
-            if (c) {
-                res.status(200)
-                res.send(JSON.stringify(c))
-                return
-            } else {
-                res.status(204)
-                res.end()
-                return
-            }
-        }
-
-    }
-
-    res.status(200)
-    res.send(JSON.stringify(clients))
-}
-
 function ep_getConnections(req, res) {
-    if (!verifyReqAuthentication(req)) {
-        req.status(403)
-        res.end()
-        return
-    }
 
     if (req.params) {
 
@@ -456,10 +250,49 @@ function ep_getConnections(req, res) {
 }
 
 module.exports.setup = (path, app) => {
+    app.use(path, (req, res, next) => {
+        
+        if (verifyReqAuthentication(req)) {
+            next()
+        } else {
+            log(`Unauthenticated connection attempt from ${req.connection.remoteAddress}.`)
+            res.status(403)
+            res.end()
+        }
+    })
+
     app.ws(`${path}/connect`, ep_wsConnect)
-    app.post(`${path}/provision`, ep_provisionClient)
-    app.get(`${path}/client`, ep_getClients)
-    app.get(`${path}/client/:clientId`, ep_getClients)
     app.get(`${path}/connection`, ep_getConnections)
     app.get(`${path}/connection/:connectionId`, ep_getConnections)
+    
+    for (var namespace in providers) {
+        let endpoints = providers[namespace].endpoints
+        if (endpoints && Array.isArray(endpoints)) {
+            for (var i in endpoints) {
+                let endpoint = endpoints[i]
+
+                if (!endpoint.route || typeof(endpoint.route) !== 'string' || !endpoint.route.match(/\/([^/]+(\/[^/]+)*)?/) ) {
+                    log(`Invalid endpoint route specified: ${endpoint.route}`)
+                    continue
+                }
+
+                if (!endpoint.method || typeof(endpoint.method) !== 'string' || !['connect', 'delete', 'get', 'head', 'options', 'patch', 'post', 'put', 'trace'].includes(endpoint.method)) {
+                    log(`Invalid endpoint method specified: ${endpoint.method}`)
+                    continue
+                }
+
+                if (!endpoint.handler || typeof(endpoint.handler) !== 'function') {
+                    log(`Invalid endpoint handler specified: ${endpoint.handler}`)
+                    continue
+                }
+
+                let route = `${path}${endpoint.route}`
+
+                log(`Adding ${endpoint.method} handler at '${route}'`)
+                console.log(endpoint.handler)
+
+                app[endpoint.method](route, endpoint.handler)
+            }
+        }
+    }
 }
