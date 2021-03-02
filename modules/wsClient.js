@@ -286,10 +286,10 @@ module.exports.setup = (path, app) => {
                     continue
                 }
 
-                let route = `${path}${endpoint.route}`
+                let route = `${path}/${namespace}${endpoint.route}`
 
                 log(`Adding ${endpoint.method} handler at '${route}'`)
-                console.log(endpoint.handler)
+                // console.log(endpoint.handler)
 
                 app[endpoint.method](route, endpoint.handler)
             }
