@@ -3,7 +3,7 @@
 const { DateTime } = require('luxon')
 const {v4: uuidv4} = require('uuid')
 
-const clients = require('./clients')
+const clients = require('./client')
 
 var connections = []
 
@@ -36,24 +36,6 @@ function verifyReqAuthentication(req) {
 // define a handler that can accept the message object received from the server, a connection object and a 'record'
 // object containing metadata about the connection (including the clientId of the client associated with the connection).
 var providers = {
-    'token': {
-        version: '0.1.0.0',
-        messages: {
-            /**
-             * 'token.refresh' message
-             * Client asks for a new token, server responds with a 'refresh.issue' message containing
-             * the new token in the field called 'token'.
-             */
-            'refresh': (message, connection, record) => {
-                let r = clients.provisionToken(record.clientId)
-                connection.send(JSON.stringify({
-                    type: 'token.issue',
-                    token: r.token,
-                    expires: r.expires
-                }))
-            }
-        }
-    },
     'session': {
         version: '0.1.0.0',
         messages: {
@@ -189,10 +171,10 @@ function ep_wsConnect (ws, request) {
             return
         }
 
-        let m = msg.type.match(/^(?<provider>[A-z0-9\-_]+)\.(?<message>[A-z0-9\-_]+)$/)
+        let m = msg.type.match(/^(?<provider>[A-z0-9\-_]+)\.(?<message>[A-z0-9\-_.]+)$/)
 
         if (!m) {
-            log(`Message without with invalid message type: ${message}`)
+            log(`Message with invalid message type: ${message}`)
             return
         }
 
@@ -218,7 +200,7 @@ function ep_wsConnect (ws, request) {
     })
 
     ws.on('close', () => {
-        log(`Connection ${record.id} closed.`)
+        log(`Connection ${record.id} closed (client: ${record.clientId}).`)
         cleanup()
     })
 

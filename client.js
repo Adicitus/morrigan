@@ -89,6 +89,17 @@ providers = {
                 }))
             }
         }
+    },
+
+    'client': {
+        version: '0.1.0.0',
+        messages: {
+            'token.issue': (message, connection) => {
+                console.log(`${new Date()} | New token issued.`)
+                token = message.token
+                saveToken(token)
+            }
+        }
     }
 }
 
@@ -96,11 +107,12 @@ function connect() {
 
     // Request token refresh every 8 hours.
     const tokenRefresh = setInterval(() => {
-        connection.send(JSON.stringify(
-            { type: 'token.refresh' }
-        ))
-    },
-    (8 * 3600 * 1000))
+            connection.send(JSON.stringify(
+                { type: 'client.token.refresh' }
+            ))
+        },
+        (8 * 3600 * 1000)
+    )
 
     const connection = new WebSocket(settings.reportURL)
 
@@ -127,7 +139,7 @@ function connect() {
             return
         }
 
-        let m = msg.type.match(/^(?<provider>[A-z0-9\-_]+)\.(?<message>[A-z0-9\-_]+)$/)
+        let m = msg.type.match(/^(?<provider>[A-z0-9\-_]+)\.(?<message>[A-z0-9\-_.]+)$/)
 
         if (!m) {
             log(`Invalid message received from server (invalid type format): ${message}`)

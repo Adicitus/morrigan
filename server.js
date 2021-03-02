@@ -21,7 +21,7 @@ app.use(express.static(`${__dirname}/public`))
 
 auth.setup('/auth', app)
 
-wsClient.setup('/clients', app)
+wsClient.setup('/api', app)
 
 app.use('/chat', express.static(`${__dirname}/public/chat`))
 wsChat.setup('/chat/connect', app)

@@ -184,6 +184,7 @@ module.exports.provisionToken   = provisionToken
 module.exports.getClient        = getClient
 module.exports.removeClient     = removeClient
 
+/* =========== Start Endpoint Definition ============== */
 
 function ep_provisionClient(req, res) {
 
@@ -222,9 +223,24 @@ function ep_getClients(req, res) {
     res.send(JSON.stringify(getClients()))
 }
 
-
 module.exports.endpoints = [
     {route: '/', method: 'get', handler: ep_getClients},
     {route: '/provision', method: 'post', handler: ep_provisionClient},
     {route: '/:clientId', method: 'get', handler: ep_getClients}
 ]
+
+module.exports.messages = {
+    /**
+     * The client is asking for a refreshed token, respond wiht client.token.issue
+     * containing a newly provisioned token.
+     */
+    'token.refresh': (message, connection, record) => {
+        log(`Client ${record.clientId} requested a new token.`)
+        let r = provisionToken(record.clientId)
+        connection.send(JSON.stringify({
+            type: 'client.token.issue',
+            token: r.token,
+            expires: r.expires
+        }))
+    }
+}

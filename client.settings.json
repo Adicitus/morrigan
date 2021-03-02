@@ -1,4 +1,4 @@
 {
-    "reportURL": "http://localhost:1337/clients/connect",
-    "token": "RkxPUkVOUzAx.eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6ImE2ZTBjYzc4LWVmNzYtNGM3My04MTc0LTQzZjg0YmNlODQxNCIsImNsaWVudElkIjoiRkxPUkVOUzAxIiwiaWF0IjoxNjE0NzIxMTMzLCJleHAiOjE2MTczMDk1MzN9.CP4byWFF6ie7qsuD9G64znx9fgCvGYciNpLEGyWI8Tw"
+    "reportURL": "http://localhost:1337/api/connect",
+    "token": "RkxPUkVOU1RS.eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjMzMTdjMDBmLWMwZDAtNGQ5OS1iNzM4LWYzMGUwYzI5NDBkZCIsImNsaWVudElkIjoiRkxPUkVOU1RSIiwiaWF0IjoxNjE0NzI2NTUyLCJleHAiOjE2MTczMTQ5NTJ9.5VNVDfiDZY88T7xMqIlbYM1cFfYsHKtKjVKZYhdDG4E"
 }
