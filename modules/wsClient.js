@@ -2,8 +2,7 @@
 
 const { DateTime } = require('luxon')
 const {v4: uuidv4} = require('uuid')
-
-const clients = require('./client')
+const fs = require('fs')
 
 var connections = []
 
@@ -31,11 +30,31 @@ function verifyReqAuthentication(req) {
 
 }
 
+function loadProviders() {
+    let providers = {}
+    let providersDir = `${__dirname}/providers`
+    let providerNames = fs.readdirSync(providersDir)
+    for (var i in providerNames) {
+        let name = providerNames[i]
+        let providerModulePath = `${providersDir}/${name}/module.js`
+        if (fs.existsSync(providerModulePath)) {
+            try {
+                let provider = require(providerModulePath)
+                providers[name] = provider
+            } catch(e) {
+                log(`Failed to read provider module '${providerModulePath}': ${e}`)
+            }
+        }
+    }
+
+    return providers
+}
+
 // Temporary list of message handlers. Handlers should be defined as modules and loaded from the 'providers' directory.
 // Provider modules should export a 'version' string and a 'messages' object. Each key on the 'messages' object should
 // define a handler that can accept the message object received from the server, a connection object and a 'record'
 // object containing metadata about the connection (including the clientId of the client associated with the connection).
-var providers = {
+/* var providers =  {
     'session': {
         version: '0.1.0.0',
         messages: {
@@ -53,6 +72,9 @@ var providers = {
     },
     'client': clients
 }
+*/
+
+var providers = loadProviders()
 
 function ep_wsConnect (ws, request) {
 
@@ -108,7 +130,7 @@ function ep_wsConnect (ws, request) {
     ws.on('message', (message) => {
         // First message, assumed to be token.
         if (!record.authenticated) {
-            let r = clients.verifyToken(message)
+            let r = providers.client.verifyToken(message)
             
             if (r.state !== 'success') {
                 log(`${record.id} failed authentication attempt. state: '${r.state}', reason: ${r.reason}`)
@@ -193,7 +215,7 @@ function ep_wsConnect (ws, request) {
         }
 
         try {
-            h(msg, ws, record)
+            h(msg, ws, record, providers)
         } catch(e) {
             log (`Exception thrown while handling message: ${e}`)
         }

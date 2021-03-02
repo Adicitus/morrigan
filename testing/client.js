@@ -41,16 +41,6 @@ if (!fs.existsSync(tokenPath)) {
 // Provider modules should export a 'version' string and a 'messages' object. Each key on the 'messages' object should
 // define a handler that can accept the message object received from the server and a connection object.
 providers = {
-    'token': {
-        version: '0.1.0.0',
-        messages: {
-            issue: (message, connection) => {
-                token = message.token
-                saveToken(token)
-            }
-        }
-    },
-
     'session': {
         version: '0.1.0.0',
         messages: {
