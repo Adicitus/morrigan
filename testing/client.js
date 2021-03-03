@@ -1,5 +1,6 @@
 const WebSocket = require('ws')
 const fs = require('fs')
+const { exit } = require('process')
 
 const settingsRaw = fs.readFileSync(`${__dirname}/client.settings.json`)
 const settings = JSON.parse(settingsRaw)
@@ -101,6 +102,8 @@ providers = {
 
 function connect() {
 
+    var reconnect = true
+
     // Request token refresh every 8 hours.
     const tokenRefresh = setInterval(() => {
             connection.send(JSON.stringify(
@@ -118,6 +121,10 @@ function connect() {
 
     connection.onopen = () => {
         connection.send(token)
+        connection.send(JSON.stringify({
+            type: 'client.state',
+            state: 'ready'
+        }))
     }
 
     connection.on('message', (message) => {
@@ -165,11 +172,30 @@ function connect() {
     })
 
     connection.on('close', (e) => {
-        log(`Connection to server closed, attempting to reconnect in 30 seconds: ${e}`)
-        clearInterval(tokenRefresh)
-        setTimeout(connect, 30000)
+        log(`Connection to server closed`)
+        if (reconnect) {
+            log(`Attempting to reconnect in 30 seconds: ${e}`)
+            clearInterval(tokenRefresh)
+            setTimeout(connect, 30000)
+        }
     })
 
+    const handleSignal = (e) => {
+        console.log(e)
+        connection.send(JSON.stringify({
+            type: 'client.state',
+            state: `stop.${e}`
+        }))
+        reconnect = false
+        connection.close()
+        process.exit()
+    }
+
+    process.on('SIGTERM', handleSignal)
+    process.on('SIGINT',  handleSignal)
+    process.on('SIGHUP',  handleSignal)
+
 }
+
 
 connect()

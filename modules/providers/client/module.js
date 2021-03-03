@@ -242,5 +242,11 @@ module.exports.messages = {
             token: r.token,
             expires: r.expires
         }))
+    },
+
+    'state': (message, connection, record, providers) => {
+        log(`Client ${record.clientId} reported state: ${message.state}`)
+        let client = providers.client.getClient(record.clientId)
+        client.state = message.state
     }
 }
