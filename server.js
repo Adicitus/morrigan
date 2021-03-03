@@ -1,12 +1,12 @@
 "use strict"
 
 const port = 1337
-process.title = "node-chat-server"
+process.title = "node-report-server"
 
 const http = require('http')
 const express = require('express')
 const bodyParser = require('body-parser')
-const wsChat = require('./modules/wsChat')
+
 const wsClient = require('./modules/wsClient')
 const auth = require('./modules/auth')
 
@@ -17,14 +17,8 @@ var appWS = require('express-ws')(app, server)
 
 app.use(bodyParser.json())
 app.use(auth.mw_verify)
-app.use(express.static(`${__dirname}/public`))
-
 auth.setup('/auth', app)
-
 wsClient.setup('/api', app)
-
-app.use('/chat', express.static(`${__dirname}/public/chat`))
-wsChat.setup('/chat/connect', app)
 
 
 
