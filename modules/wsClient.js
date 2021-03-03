@@ -201,6 +201,10 @@ function ep_wsConnect (ws, request) {
 
     ws.on('close', () => {
         log(`Connection ${record.id} closed (client: ${record.clientId}).`)
+        let client = providers.client.getClient(record.clientId)
+        if (!client.state.match(/^stopped/)) {
+            client.state = 'unknown'
+        }
         cleanup()
     })
 

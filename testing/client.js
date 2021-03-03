@@ -182,12 +182,14 @@ function connect() {
 
     const handleSignal = (e) => {
         console.log(e)
-        connection.send(JSON.stringify({
-            type: 'client.state',
-            state: `stop.${e}`
-        }))
         reconnect = false
-        connection.close()
+        if (connection.readyState === 1) {
+            connection.send(JSON.stringify({
+                type: 'client.state',
+                state: `stopped.${e}`
+            }))
+            connection.close()
+        }
         process.exit()
     }
 
