@@ -113,11 +113,13 @@ function ep_wsConnect (ws, request) {
             if (r.state !== 'success') {
                 log(`${record.id} failed authentication attempt. state: '${r.state}', reason: ${r.reason}`)
                 log(`Client sent invalid token, closing connection`)
-                ws.send(JSON.stringify({
-                    type: 'connection.state',
-                    state: 'rejected',
-                    reason: 'Invalid token.'
-                }))
+                if (ws.readyState === 1) {
+                    ws.send(JSON.stringify({
+                        type: 'connection.state',
+                        state: 'rejected',
+                        reason: 'Invalid token.'
+                    }))
+                }
                 cleanup()
                 return
             }
@@ -202,8 +204,10 @@ function ep_wsConnect (ws, request) {
     ws.on('close', () => {
         log(`Connection ${record.id} closed (client: ${record.clientId}).`)
         let client = providers.client.getClient(record.clientId)
-        if (!client.state.match(/^stopped/)) {
-            client.state = 'unknown'
+        if (client) {
+            if (!client.state || !client.state.match(/^stopped/)) {
+                client.state = 'unknown'
+            }
         }
         cleanup()
     })

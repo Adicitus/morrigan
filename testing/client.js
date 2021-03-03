@@ -1,6 +1,5 @@
 const WebSocket = require('ws')
 const fs = require('fs')
-const { exit } = require('process')
 
 const settingsRaw = fs.readFileSync(`${__dirname}/client.settings.json`)
 const settings = JSON.parse(settingsRaw)
@@ -54,6 +53,10 @@ providers = {
                     }
                     case 'accepted': {
                         log(`The server accepted connection.`)
+                        connection.send(JSON.stringify({
+                            type: 'client.state',
+                            state: 'ready'
+                        }))
                         return
                     }
                 }
@@ -121,10 +124,6 @@ function connect() {
 
     connection.onopen = () => {
         connection.send(token)
-        connection.send(JSON.stringify({
-            type: 'client.state',
-            state: 'ready'
-        }))
     }
 
     connection.on('message', (message) => {
