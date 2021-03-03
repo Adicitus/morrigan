@@ -41,23 +41,29 @@ if (!fs.existsSync(tokenPath)) {
 // Provider modules should export a 'version' string and a 'messages' object. Each key on the 'messages' object should
 // define a handler that can accept the message object received from the server and a connection object.
 providers = {
-    'session': {
+
+    'connection': {
         version: '0.1.0.0',
         messages: {
             state: (message, connection) => {
                 switch(message.state) {
                     case 'rejected': {
-                        log(`The server rejected session: ${message.reason}`)
+                        log(`The server rejected connection: ${message.reason}`)
                         return
                     }
                     case 'accepted': {
-                        log(`The server accepted session.`)
+                        log(`The server accepted connection.`)
                         return
                     }
                 }
-            },
+            }
+        }
+    },
 
-            capability: (message, connection) => {
+    'capability': {
+        version: '0.1.0.0',
+        messages: {
+            report: (message, connection) => {
                 let cs = []
 
                 for (var name in providers) {
@@ -74,7 +80,7 @@ providers = {
                 }
 
                 connection.send(JSON.stringify({
-                    type: 'session.capability',
+                    type: 'capability.report',
                     capabilities: cs
                 }))
             }

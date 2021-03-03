@@ -50,30 +50,10 @@ function loadProviders() {
     return providers
 }
 
-// Temporary list of message handlers. Handlers should be defined as modules and loaded from the 'providers' directory.
+// Handlers should be defined as modules and loaded from the 'providers' directory.
 // Provider modules should export a 'version' string and a 'messages' object. Each key on the 'messages' object should
 // define a handler that can accept the message object received from the server, a connection object and a 'record'
 // object containing metadata about the connection (including the clientId of the client associated with the connection).
-/* var providers =  {
-    'session': {
-        version: '0.1.0.0',
-        messages: {
-            capability: (message, connection, record) => {
-                log(`${record.clientId} reported the following capabilities:`)
-                for (var c in message.capabilities) {
-                    let capability = message.capabilities[c]
-                    log (`${capability.name} (${capability.version})`)
-                }
-
-                let client = clients.getClient(record.clientId)
-                client.capabilities = message.capabilities
-            }
-        }
-    },
-    'client': clients
-}
-*/
-
 var providers = loadProviders()
 
 function ep_wsConnect (ws, request) {
@@ -85,8 +65,6 @@ function ep_wsConnect (ws, request) {
         isAlive: true,
         open: true
     }
-
-    const index = connections.push(record) - 1
 
     log(`Connection ${record.id} established from ${request.connection.remoteAddress} via ${request.headers.origin}`)
 
@@ -136,7 +114,7 @@ function ep_wsConnect (ws, request) {
                 log(`${record.id} failed authentication attempt. state: '${r.state}', reason: ${r.reason}`)
                 log(`Client sent invalid token, closing connection`)
                 ws.send(JSON.stringify({
-                    type: 'session.state',
+                    type: 'connection.state',
                     state: 'rejected',
                     reason: 'Invalid token.'
                 }))
@@ -169,13 +147,13 @@ function ep_wsConnect (ws, request) {
 
             ws.send(
                 JSON.stringify({
-                    type: 'session.state',
+                    type: 'connection.state',
                     state: 'accepted'
                 })
             )
             ws.send(
                 JSON.stringify({
-                   type: 'session.capability' 
+                   type: 'capability.report' 
                 })
             )
             return
@@ -257,6 +235,7 @@ module.exports.setup = (path, app) => {
     app.use(path, (req, res, next) => {
         
         if (verifyReqAuthentication(req)) {
+            req.providers = providers
             next()
         } else {
             log(`Unauthenticated connection attempt from ${req.connection.remoteAddress}.`)
@@ -292,7 +271,7 @@ module.exports.setup = (path, app) => {
 
                 let route = `${path}/${namespace}${endpoint.route}`
 
-                log(`Adding ${endpoint.method} handler at '${route}'`)
+                log(`Adding ${endpoint.method.toUpperCase()} handler at '${route}'`)
                 // console.log(endpoint.handler)
 
                 app[endpoint.method](route, endpoint.handler)
