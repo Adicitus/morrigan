@@ -275,7 +275,7 @@ module.exports.setup = (path, app) => {
 
                 let route = `${path}/${namespace}${endpoint.route}`
 
-                log(`Adding ${endpoint.method.toUpperCase()} handler at '${route}'`)
+                log(`Adding handler for '${endpoint.method.toUpperCase()} ${route}'`)
                 // console.log(endpoint.handler)
 
                 app[endpoint.method](route, endpoint.handler)
