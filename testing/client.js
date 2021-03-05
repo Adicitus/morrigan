@@ -1,108 +1,73 @@
+"use strict"
+
 const WebSocket = require('ws')
 const fs = require('fs')
 
 const settingsRaw = fs.readFileSync(`${__dirname}/client.settings.json`)
 const settings = JSON.parse(settingsRaw)
 
-const stateDir = `${__dirname}/state`
-const tokenPath = `${stateDir}/curToken`
+const stateDir = (settings.stateDir) ? settings.stateDir : `${__dirname}/state`
 
 function log(msg) {
     console.log(`${new Date()} | ${msg}`)
-}
-
-const loadToken = () => {
-    try {
-        let b = fs.readFileSync(tokenPath)
-        return b.toString()
-    } catch (e) {
-        return false
-    }
-}
-
-const saveToken = (token) => {
-    fs.writeFileSync(tokenPath, token)
 }
 
 if (!fs.existsSync(stateDir)) {
     fs.mkdirSync(stateDir)
 }
 
-var token = null
-
-if (!fs.existsSync(tokenPath)) {
-    saveToken(settings.token)
-    token = settings.token
-} else {
-    token = loadToken(tokenPath)
-}
-
-// Temporary list of message handlers. Handlers should be defined as modules and loaded from the 'providers' directory.
-// Provider modules should export a 'version' string and a 'messages' object. Each key on the 'messages' object should
-// define a handler that can accept the message object received from the server and a connection object.
-providers = {
-
-    'connection': {
-        version: '0.1.0.0',
-        messages: {
-            state: (message, connection) => {
-                switch(message.state) {
-                    case 'rejected': {
-                        log(`The server rejected connection: ${message.reason}`)
-                        return
-                    }
-                    case 'accepted': {
-                        log(`The server accepted connection.`)
-                        connection.send(JSON.stringify({
-                            type: 'client.state',
-                            state: 'ready'
-                        }))
-                        return
-                    }
-                }
-            }
-        }
-    },
-
-    'capability': {
-        version: '0.1.0.0',
-        messages: {
-            report: (message, connection) => {
-                let cs = []
-
-                for (var name in providers) {
-                    let h = providers[name]
-                    let r = { name: name, version: h.version, messages: [] }
-
-                    if (h.messages) {
-                        for (m in h.messages) {
-                            r.messages.push(m)
-                        }
-                    }
-
-                    cs.push(r)
-                }
-
-                connection.send(JSON.stringify({
-                    type: 'capability.report',
-                    capabilities: cs
-                }))
-            }
-        }
-    },
-
-    'client': {
-        version: '0.1.0.0',
-        messages: {
-            'token.issue': (message, connection) => {
-                console.log(`${new Date()} | New token issued.`)
-                token = message.token
-                saveToken(token)
+function loadProviders() {
+    let providers = {}
+    let providersDir = `${__dirname}/providers`
+    let providerNames = fs.readdirSync(providersDir)
+    for (var i in providerNames) {
+        let name = providerNames[i]
+        let providerModulePath = `${providersDir}/${name}/module.js`
+        if (fs.existsSync(providerModulePath)) {
+            try {
+                let provider = require(providerModulePath)
+                providers[name] = provider
+            } catch(e) {
+                log(`Failed to read provider module '${providerModulePath}': ${e}`)
             }
         }
     }
+
+    return providers
 }
 
+/**
+ * Handlers should be defined as modules and loaded from the 'providers' directory.
+ * Provider modules should export a 'version' string and optionally:
+ *  + A 'messages' object. Each key on the 'messages' object should
+ *    define a handler that can accept the message object received
+ *    from the server, a connection object and the core environment.
+ *  + A setup function that will be called with the core environment
+ *    as parameter once client has finished initializing.
+ */
+var providers = loadProviders()
+
+/**
+ * Core environment object, passed to all message handlers and setup functions.
+ */
+const coreEnv = {
+    'settings': settings,
+    'providers': providers,
+    'log': log,
+    'stateDir': stateDir
+}
+
+for (const p in providers) {
+    let provider = providers[p]
+    if (provider.setup) {
+        provider.setup(coreEnv)
+    }
+}
+
+
+/**
+ * Main function, tries to connect to a server.
+ */
 function connect() {
 
     var reconnect = true
@@ -123,7 +88,8 @@ function connect() {
     })
 
     connection.onopen = () => {
-        connection.send(token)
+        console.log(providers)
+        connection.send(providers.client.getToken())
     }
 
     connection.on('message', (message) => {
@@ -163,7 +129,7 @@ function connect() {
         }
 
         try {
-            h(msg, connection)
+            h(msg, connection, coreEnv)
         } catch(e) {
             log(`Exception occured while processing message: ${e}`)
         }
