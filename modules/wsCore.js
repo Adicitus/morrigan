@@ -5,6 +5,17 @@ const {v4: uuidv4} = require('uuid')
 const fs = require('fs')
 
 var connections = []
+const settingsPath = `${__dirname}\server.setings.json`
+
+var settings = null
+
+if (fs.existsSync(settingsPath)) {
+    let settingsRaw = fs.readFileSync(settingsPath)
+    settings = JSON.stringify(settingsRaw.toString())
+} else {
+    settings = {}
+}
+
 
 function log(msg) {
     console.log(`${DateTime.now()} | ${msg}`)
@@ -56,6 +67,19 @@ function loadProviders() {
 // object containing metadata about the connection (including the clientId of the client associated with the connection).
 var providers = loadProviders()
 
+const coreEnv = {
+    'providers': providers,
+    'settings': settings,
+    'log': log
+}
+
+for (const p in providers) {
+    let provider = providers[p]
+    if (provider.setup) {
+        provider.setup(coreEnv)
+    }
+}
+
 function ep_wsConnect (ws, request) {
 
     var record = {
@@ -65,6 +89,8 @@ function ep_wsConnect (ws, request) {
         isAlive: true,
         open: true
     }
+
+    connections.push(record)
 
     log(`Connection ${record.id} established from ${request.connection.remoteAddress} via ${request.headers.origin}`)
 
@@ -195,7 +221,7 @@ function ep_wsConnect (ws, request) {
         }
 
         try {
-            h(msg, ws, record, providers)
+            h(msg, ws, record, coreEnv)
         } catch(e) {
             log (`Exception thrown while handling message: ${e}`)
         }
@@ -243,7 +269,7 @@ module.exports.setup = (path, app) => {
     app.use(path, (req, res, next) => {
         
         if (verifyReqAuthentication(req)) {
-            req.providers = providers
+            req.core = coreEnv
             next()
         } else {
             log(`Unauthenticated connection attempt from ${req.connection.remoteAddress}.`)

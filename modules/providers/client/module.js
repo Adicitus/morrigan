@@ -6,10 +6,7 @@ const {v4: uuidv4} = require('uuid')
 
 var clients = []
 var tokens = []
-
-function log(msg) {
-    console.log(`${DateTime.now()} | ${msg}`)
-}
+var log = null
 
 
 function getClient(clientId) {
@@ -234,8 +231,8 @@ module.exports.messages = {
      * The client is asking for a refreshed token, respond wiht client.token.issue
      * containing a newly provisioned token.
      */
-    'token.refresh': (message, connection, record) => {
-        log(`Client ${record.clientId} requested a new token.`)
+    'token.refresh': (message, connection, record, core) => {
+        core.log(`Client ${record.clientId} requested a new token.`)
         let r = provisionToken(record.clientId)
         connection.send(JSON.stringify({
             type: 'client.token.issue',
@@ -244,9 +241,14 @@ module.exports.messages = {
         }))
     },
 
-    'state': (message, connection, record, providers) => {
-        log(`Client ${record.clientId} reported state: ${message.state}`)
+    'state': (message, connection, record, core) => {
+        let providers = core.providers
+        core.log(`Client ${record.clientId} reported state: ${message.state}`)
         let client = providers.client.getClient(record.clientId)
         client.state = message.state
     }
+}
+
+module.exports.setup = (coreEnv) => {
+    log = coreEnv.log
 }

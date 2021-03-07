@@ -1,17 +1,14 @@
-const { DateTime } = require('luxon')
-
-function log(msg) {
-    console.log(`${DateTime.now()} | ${msg}`)
-}
-
 module.exports.version = '0.1.0.0'
 
 module.exports.messages = {
-    report: (message, connection, record, providers) => {
-        log(`${record.clientId} reported the following capabilities:`)
+    report: (message, connection, record, core) => {
+
+        providers = core.providers
+
+        core.log(`${record.clientId} reported the following capabilities:`)
         for (var c in message.capabilities) {
             let capability = message.capabilities[c]
-            log (`${capability.name} (${capability.version})`)
+            core.log (`${capability.name} (${capability.version})`)
         }
 
         let client = providers.client.getClient(record.clientId)
@@ -26,7 +23,7 @@ module.exports.endpoints = [
         handler: (req, res) => {
             let cs = []
 
-            let providers = req.providers
+            let providers = req.core.providers
 
             for (var name in providers) {
                 let h = providers[name]
@@ -60,7 +57,7 @@ module.exports.endpoints = [
         method: 'get',
         handler: (req, res) => {
             let cs = []
-            let providers = req.providers
+            let providers = req.core.providers
             let client = providers.client.getClient(req.params.clientId)
 
             if (!client) {
