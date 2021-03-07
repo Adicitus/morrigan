@@ -45,7 +45,7 @@ const authTypes = {
 
 // Temporary list of users, this should be moved into a DB and the password should be stored as a salted hash.
 var identities = [
-    {name: 'admin', auth: { type: 'password', password: 'Pa$$w0rd' }, functions: ['chat', 'clients']}
+    {name: 'admin', auth: { type: 'password', password: 'Pa$$w0rd' }, functions: ['api']}
 ]
 
 /*

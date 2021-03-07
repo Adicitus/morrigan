@@ -5,6 +5,8 @@ const {v4: uuidv4} = require('uuid')
 const fs = require('fs')
 
 var connections = []
+var sockets = {}
+
 const settingsPath = `${__dirname}\server.setings.json`
 
 var settings = null
@@ -33,7 +35,7 @@ function verifyReqAuthentication(req) {
 
     let functions = req.authenticated.functions
 
-    if (!functions || !functions.includes('clients')) {
+    if (!functions || !functions.includes('api')) {
         return false
     }
 
@@ -41,6 +43,31 @@ function verifyReqAuthentication(req) {
 
 }
 
+var send = (connectionId, message) => {
+    let r = connections.find((o) => o.id === connectionId)
+    if (!r.isAlive || !r.open ) {
+        return { status: 'failed', reason: 'Connection closed or client not live.' }
+    }
+
+    let msg = null
+
+    switch(typeof(message)) {
+        case 'string': { msg = message }
+        default: {msg = JSON.stringify(message)}
+    }
+
+    let s = sockets[connectionId]
+
+    s.send(msg)
+
+    return {status: 'success'}
+}
+
+/**
+ * Tries to load all providers from the 'providers' directory (__dirname/providers).
+ * 
+ * A provider module is a file called module.js in a folder with the name of the provider.
+ */
 function loadProviders() {
     let providers = {}
     let providersDir = `${__dirname}/providers`
@@ -124,6 +151,11 @@ function ep_wsConnect (ws, request) {
         record.open = false
         clearInterval(heartBeatCheck)
         clearTimeout(authenticaiontTimeout)
+
+        if (!record.clientId) {
+            let i = connections.findIndex((o) => o.id === record.id)
+            connections.splice(i, 1)
+        }
     }
 
     ws.on('pong', () => {
@@ -172,6 +204,7 @@ function ep_wsConnect (ws, request) {
             }
 
             client.connectionId = record.id
+            sockets[record.id]  = ws
 
             ws.send(
                 JSON.stringify({
@@ -265,6 +298,66 @@ function ep_getConnections(req, res) {
     res.send(JSON.stringify(connections))
 }
 
+function ep_send(req, res) {
+    if (!req.authenticated.functions.includes('connection.send')) {
+        res.status(403)
+        res.send(JSON.stringify({ status: 'failed', reason: 'Send not permitted.' }))
+        return
+    }
+
+    if (!req.params.connectionId) {
+        res.status(400)
+        res.send(JSON.stringify({ status: 'failed', reason: 'No connectionId specified.' }))
+        return
+    }
+
+    if (!req.body) {
+        res.status(400)
+        res.send(JSON.stringify({ status: 'failed', reason: 'No message specified.' }))
+        return
+    }
+
+    let msg = req.body
+
+    if (!msg.type) {
+        res.status(400)
+        res.send(JSON.stringify({ status: 'failed', reason: 'No message type specified.' }))
+        return
+    }
+
+    let cid = req.params.connectionId
+    let r = send(cid, msg)
+
+    if (r.status === 'success') {
+        res.status(200)
+    } else {
+        res.status(400)
+    }
+
+    res.send(JSON.stringify(r))
+}
+
+/**
+ * Connection pseudo-provider is specified here because the connection
+ * functionality is a part of wsCore, but declaring a provider allows
+ * this functionality to be covered by the same system used to handle
+ * other providers.
+ */
+providers.connection = {
+    version: '0.1.0.0',
+    endpoints: [
+        {route: '/', method: 'get', handler: ep_getConnections},
+        {route: '/:connectionId', method: 'get', handler: ep_getConnections},
+        {route: '/send/:connectionId', method: 'post', handler: ep_send}
+    ],
+    functions: [
+        'api',
+        'connection',
+        'connection.send'
+    ],
+    send: send
+}
+
 module.exports.setup = (path, app) => {
     app.use(path, (req, res, next) => {
         
@@ -279,8 +372,6 @@ module.exports.setup = (path, app) => {
     })
 
     app.ws(`${path}/connect`, ep_wsConnect)
-    app.get(`${path}/connection`, ep_getConnections)
-    app.get(`${path}/connection/:connectionId`, ep_getConnections)
     
     for (var namespace in providers) {
         let endpoints = providers[namespace].endpoints
@@ -306,7 +397,6 @@ module.exports.setup = (path, app) => {
                 let route = `${path}/${namespace}${endpoint.route}`
 
                 log(`Adding handler for '${endpoint.method.toUpperCase()} ${route}'`)
-                // console.log(endpoint.handler)
 
                 app[endpoint.method](route, endpoint.handler)
             }

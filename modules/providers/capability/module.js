@@ -8,7 +8,7 @@ module.exports.messages = {
         core.log(`${record.clientId} reported the following capabilities:`)
         for (var c in message.capabilities) {
             let capability = message.capabilities[c]
-            core.log (`${capability.name} (${capability.version})`)
+            core.log(`${capability.name} (${capability.version}), messages: [ ${capability.messages.join(', ')} ]`)
         }
 
         let client = providers.client.getClient(record.clientId)
