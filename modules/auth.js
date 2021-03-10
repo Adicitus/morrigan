@@ -4,48 +4,27 @@
 
 const { DateTime } = require('luxon')
 const jwt = require('jsonwebtoken')
+const {v4: uuidv4} = require('uuid')
 
-const secret = Math.random().toString(16)
+const secret = uuidv4()
 
 // Temporary hard-coded list of supported authentication types.
 const authTypes = {
-    password: {
-        authenticate: (identity, details) => {
-            if (!details.password) {
-                return {state:'requestError', reason: 'No password provided.'}
-            }
-
-            if (identity.auth.password !== details.password) {
-                return {state:'failed', reason: 'Invalid username/password.'}
-            }
-
-            var t = newToken(identity)
-            return {state: 'success', token: t}
-        },
-        validate: (details) => {
-            const passwordRegex = /[A-z0-9_\-.]{8,}/
-
-            if (!details.password) {
-                return {state: 'requestError', reason: `No password specified.`}
-            }
-
-            if (!details.password.match(passwordRegex)) {
-                return {state: 'failed', reason: `Invalid password format (should match regex ${passwordRegex}).`}
-            }
-
-            let cleanRecord = {
-                type: 'password',
-                password: details.password
-            }
-
-            return {state: 'success', pass: true, cleanRecord: cleanRecord}
-        }
-    }
+    password: require('./authProviders/password/module')
 }
 
 // Temporary list of users, this should be moved into a DB and the password should be stored as a salted hash.
 var identities = [
-    {name: 'admin', auth: { type: 'password', password: 'Pa$$w0rd' }, functions: ['api']}
+    {
+        name: 'admin',
+        auth: {
+            type: 'password',
+            password: 'Pa$$w0rd',
+            salt: 'fcbca933-7021-432b-836d-c1142b1f310d',
+            hash: '5a59750c5ae9eec93736464df0aabc3ff21c576078cd6fa378f0067589a715997e188a06ce98e2e4c4d01749d754b281032910e261dce397bf6b574cbc2b5345'
+        },
+        functions: ['auth', 'api']
+    }
 ]
 
 /*
@@ -128,6 +107,7 @@ function validateIdentitySpec(details, options) {
     const functionRegex = /[A-z0-9_\-.]+/
 
     var cleanRecord = {}
+    var authType = null
 
     if (!options) {
         options = {}
@@ -169,7 +149,7 @@ function validateIdentitySpec(details, options) {
             return { state: 'requestError', reason: 'No authentication type specified.' }
         }
 
-        let authType = authTypes[auth.type]
+        authType = authTypes[auth.type]
 
         if (!authType) {
             return { state: 'serverConfigurationError', reason: `Invalid authentication type specified for user: ${auth.type}` }
@@ -179,9 +159,13 @@ function validateIdentitySpec(details, options) {
             return { state: 'serverConfigurationError', reason: `No validation function specified for authentication type: ${auth.type}` }
         }
 
+        if (!authType.commit) {
+            return { state: 'serverConfigurationError', reason: `No commit function specified for authentication type: ${auth.type}` }
+        }
+
         let r = authType.validate(auth)
 
-        if (!r.pass) {
+        if (r.state !== 'success') {
             return r
         } else {
             cleanRecord.auth = r.cleanRecord
@@ -230,7 +214,7 @@ function validateIdentitySpec(details, options) {
         cleanRecord.functions = []
     }
 
-    return {state: 'success', pass: true, cleanRecord: cleanRecord }
+    return {state: 'success', pass: true, cleanRecord: cleanRecord, authType: authType }
 }
 
 /**
@@ -252,8 +236,24 @@ function addIdentity(details){
     let r = validateIdentitySpec(details, { newIdentity: true })
 
     if (r.pass) {
-        identities.push(r.cleanRecord)
-        return { state: 'success', identity: r.cleanRecord }
+
+        let record = r.cleanRecord
+        record.id = uuidv4()
+
+        try {
+            r = r.authType.commit(record.auth)
+            if (r.state !== 'success') {
+                return r
+            }
+            record.auth = r.commitRecord
+        } catch (e) {
+            console.log(`Error occured while committing authentication details:`)
+            console.log(e)
+            return { state: 'serverAuthCommitFailed', reason: 'An exception occured while commiting authentication details.' }
+        }
+
+        identities.push(record)
+        return { state: 'success', identity: record }
     } else {
         return r
     }
@@ -267,15 +267,27 @@ function setIdentity(details) {
         return r
     }
 
+    var record = r.cleanRecord
+
     let i = identities.findIndex((o) => o.name == name )
     let identity = identities[i]
 
     let identityFields = Object.keys(identity)
-    let updateFields = Object.keys(r.cleanRecord)
+    let updateFields = Object.keys(record)
 
     for (var uf in updateFields) {
-        if (identityFields.includes(uf)) {
-            identity[uf] = r.cleanRecord[uf]
+        switch(uf) {
+            case 'auth': {
+                let authType = authTypes[record.auth.type]
+                let commitRecord = authType.commit(record.auth)
+                identity.auth = commitRecord
+            }
+
+            default: {
+                if (identityFields.includes(uf)) {
+                    identity[uf] = r.cleanRecord[uf]
+                }
+            }
         }
     }
 
@@ -312,7 +324,16 @@ function authenticate(details) {
     
     let authType = authTypes[identity.auth.type]
 
-    return authType.authenticate(identity, details)
+    r = authType.authenticate(identity.auth, details)
+
+    if (r.state !== 'success') {
+        return r
+    }
+
+    var t = newToken(identity)
+    r.token = t
+
+    return r
 }
 
 /* ====== Export definitions: ===== */
@@ -333,6 +354,10 @@ module.exports.verifyToken = verifyToken
  * @param {object} app - Express application to set up the authentication endpoints on.
  */
 module.exports.setup = (path, app) => {
+    
+    /**
+     * Authentication endpoint.
+     */
     app.post(path, (req, res) => {
         
         var r = authenticate(req.body)
@@ -343,17 +368,17 @@ module.exports.setup = (path, app) => {
         } else {
             switch (r.state) {
                 case 'requestError': {
-                    res.status = 400
+                    res.status(400)
                     break
                 }
     
                 case 'serverError': {
-                    res.status = 500
+                    res.status(500)
                     break
                 }
     
                 case 'failed': {
-                    res.status = 403
+                    res.status(403)
                     break
                 }
             }
@@ -361,45 +386,68 @@ module.exports.setup = (path, app) => {
         }
     })
 
-    app.post(`${path}/clients`, (req, res) => {
+    app.use(path, (req, res, next) => {
 
         if (!req.authenticated) {
-            res.status = 401
+            res.status(403)
             res.end()
             return
         }
-    
-        let auth = req.authenticated
-    
-        if (!auth.functions || !auth.functions.includes('controller')) {
-            res.status = 403
-            res.end()
-            return
-        }
-    
-        let b = req.body
-        if (!b || !b.name) {
-            res.status = 400
-            res.end()
-            return
-        }
-    
-        let i = identities.findIndex((o) => o.name == b.name)
-        if (i == -1) {
-            res.status = 400
-            res.end()
-            return
-        }
-    
-        let ident = identities[i]
 
-        let t = newToken(ident, { duration: {days: 7} })
-        res.status = 200
-        res.send(
-            JSON.stringify({
-                token: t
-            })
-        )
+        let fs = req.authenticated.functions
+
+        if (!fs || !fs.includes('auth')) {
+            res.status(403)
+            res.end()
+            return
+        }
+
+        next()
+    })
+
+    /**
+     * Add user endpoint.
+     */
+    app.post(`${path}/user`, (req, res) => {
+        
+        if (!req.body) {
+            res.status(400)
+            res.end(JSON.stringify({status: 'requestError', reason: 'No user details provided.'}))
+            return
+        }
+
+        let details = req.body
+
+        let r = addIdentity(details)
+
+        if (r.state === 'success') {
+            res.status(201)
+            res.end()
+            return
+        }
+
+        if (r.state.match(/^request/)) {
+            res.status(400)
+        } else {
+            res.status(500)
+        }
+        
+        res.send(JSON.stringify(r))
+    })
+
+    /**
+     * Remove user endpoint
+     */
+    app.delete(`${path}/user/:identityId`, (req, res) => {
+        let r = removeIdentity(req.params.identityId)
+
+        if (r.state === 'success') {
+            res.status(200)
+        } else {
+            res.status(400)
+        }
+
+        res.send(JSON.stringify(r))
     })
 }
 
