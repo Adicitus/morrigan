@@ -304,6 +304,13 @@ function setIdentity(details) {
 }
 
 /**
+ * Returns all of the identities in the authentication store.
+ */
+function getIdentities() {
+    return JSON.stringify(identities)
+}
+
+/**
  * Removes an identity from the authentication store.
  * 
  * @param {object} name - Name of the identity to remove.
@@ -429,7 +436,7 @@ module.exports.setup = (path, app) => {
     })
 
     /**
-     * Add user endpoint.
+     * Add identity endpoint.
      */
     app.post(`${path}/identity`, (req, res) => {
         
@@ -459,7 +466,15 @@ module.exports.setup = (path, app) => {
     })
 
     /**
-     * Remove user endpoint
+     * Get identities endpoint
+     */
+    app.get(`${path}/identity`, (req, res) => {
+        res.status(200)
+        res.send(getIdentities())
+    })
+
+    /**
+     * Remove identity endpoint
      */
     app.delete(`${path}/identity/:identityId`, (req, res) => {
         let r = removeIdentity(req.params.identityId)
