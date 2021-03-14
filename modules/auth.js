@@ -23,21 +23,17 @@ var identities = [
             salt: 'fcbca933-7021-432b-836d-c1142b1f310d',
             hash: '5a59750c5ae9eec93736464df0aabc3ff21c576078cd6fa378f0067589a715997e188a06ce98e2e4c4d01749d754b281032910e261dce397bf6b574cbc2b5345'
         },
-        functions: ['auth', 'api']
+        functions: ['auth.identity', 'api']
     }
 ]
 
-/*
-identity: The user to generate a token for.
-options: An object defining options for the token. Currently only 'duration' is supported and should be luxon duration.
-*/
 /**
  * Used to generate a token for the provided identity.
  * 
  * Options:
  *  - duration: A luxon duration to to define how long the token should be valid.
  * 
- * @param {object} identity - Identity details.
+ * @param {object} identity - Details of the identity to create a token for.
  * @param {object} options  - Options to modify the way that the token is generated
  */
 function newToken(identity, options) {
@@ -259,6 +255,19 @@ function addIdentity(details){
     }
 }
 
+/**
+ * Updates an existing identity with the given details.
+ * 
+ * The Following details should be provided:
+ *  - name: The name of the identity, this is currently the primary key for identities.
+ *  - auth: Authentication details. This should be an object with a field called 'type'
+ *      indicating which authentication method to use, along with any details required
+ *      to authenticate using that method.
+ *  - functions: An array of function names that the user should have access to.
+ *      This can be omitted to create an identity with no rights.
+ * 
+ * @param {object} details - Updated details for the identity
+ */
 function setIdentity(details) {
     
     let r = validateIdentitySpec(details)
@@ -294,6 +303,11 @@ function setIdentity(details) {
     return { state: 'success', identity: identity }
 }
 
+/**
+ * Removes an identity from the authentication store.
+ * 
+ * @param {object} name - Name of the identity to remove.
+ */
 function removeIdentity(name){
 
     let r = validateIdentitySpec({name: name})
@@ -308,6 +322,12 @@ function removeIdentity(name){
     return { state: 'success' }
 }
 
+/**
+ * Attempts to validate a set of authentication details and returns an object
+ * a new token.
+ * 
+ * @param {object} details - Authentication details that should be validated.
+ */
 function authenticate(details) {
 
     let r = validateIdentitySpec(details)
@@ -386,7 +406,10 @@ module.exports.setup = (path, app) => {
         }
     })
 
-    app.use(path, (req, res, next) => {
+    /**
+     * Middleware to protect identity admin functions.
+     */
+    app.use(`${path}/identity`, (req, res, next) => {
 
         if (!req.authenticated) {
             res.status(403)
@@ -396,7 +419,7 @@ module.exports.setup = (path, app) => {
 
         let fs = req.authenticated.functions
 
-        if (!fs || !fs.includes('auth')) {
+        if (!fs || !fs.includes('auth.identity')) {
             res.status(403)
             res.end()
             return
@@ -408,7 +431,7 @@ module.exports.setup = (path, app) => {
     /**
      * Add user endpoint.
      */
-    app.post(`${path}/user`, (req, res) => {
+    app.post(`${path}/identity`, (req, res) => {
         
         if (!req.body) {
             res.status(400)
@@ -438,7 +461,7 @@ module.exports.setup = (path, app) => {
     /**
      * Remove user endpoint
      */
-    app.delete(`${path}/user/:identityId`, (req, res) => {
+    app.delete(`${path}/identity/:identityId`, (req, res) => {
         let r = removeIdentity(req.params.identityId)
 
         if (r.state === 'success') {
