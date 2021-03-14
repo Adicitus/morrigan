@@ -36,7 +36,7 @@ var identityRecords = [
     {
         id: '59370df8-0a9a-4c01-b711-a8190e963bd4',
         name: 'admin',
-        auth: 'c00df22f-03bf-4200-bed7-cbaff8148e89',
+        authId: 'c00df22f-03bf-4200-bed7-cbaff8148e89',
         functions: ['auth.identity', 'api']
     }
 ]
@@ -271,7 +271,7 @@ function addIdentity(details){
 
             authenticationRecords.push(r.commitRecord)
 
-            record.auth = r.commitRecord.id
+            record.authId = r.commitRecord.id
         } catch (e) {
             console.log(`Error occured while committing authentication details:`)
             console.log(e)
@@ -333,7 +333,7 @@ function setIdentity(details) {
 
                 newAuth = r.commitRecord
                 newAuth.id = uuidv4()
-                newIdentity.auth = newAuth.id
+                newIdentity.authId = newAuth.id
                 break
             }
 
@@ -347,7 +347,7 @@ function setIdentity(details) {
 
     // Step 3, Commit changes:
     if (newAuth) {
-        let i = authenticationRecords.findIndex((o) => o.id === identity.auth)
+        let i = authenticationRecords.findIndex((o) => o.id === identity.authId)
         authenticationRecords.splice(i, 1, newAuth)
     }
 
@@ -378,7 +378,7 @@ function removeIdentity(name){
     }
 
     let identityI = identityRecords.findIndex((o) => o.name == name )
-    let authId = identityRecords[identityI].auth
+    let authId = identityRecords[identityI].authId
     let authI  = authenticationRecords.findIndex((o) => o.id === authId)
 
     authenticationRecords.splice(authI, 1)
@@ -406,7 +406,7 @@ function authenticate(details) {
     )
  
     let identity = identityRecords[i]
-    let auth = authenticationRecords.find(o => o.id === identity.auth)
+    let auth = authenticationRecords.find(o => o.id === identity.authId)
 
     if (!auth) {
         return { state: 'serverMissingAuthRecord', reason: 'Authentication record missing.'}
