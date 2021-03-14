@@ -16,6 +16,7 @@ const authTypes = {
 // Temporary list of users, this should be moved into a DB and the password should be stored as a salted hash.
 var identities = [
     {
+        id: '59370df8-0a9a-4c01-b711-a8190e963bd4',
         name: 'admin',
         auth: 'c00df22f-03bf-4200-bed7-cbaff8148e89',
         functions: ['auth.identity', 'api']
@@ -290,7 +291,7 @@ function setIdentity(details) {
     // Step 1, prepare update:
     var record = r.cleanRecord
 
-    let i = identities.findIndex((o) => o.name == name )
+    let i = identities.findIndex((o) => o.name == details.name )
     let identity = identities[i]
     let newIdentity = Object.assign({}, identity)
 
@@ -300,8 +301,9 @@ function setIdentity(details) {
     let updateFields = Object.keys(record)
 
     // Step 2, attempt to apply all new settigns:
-    for (var uf in updateFields) {
-        switch(uf) {
+    for (var ufi in updateFields) {
+        let fieldName = updateFields[ufi]
+        switch(fieldName) {
             case 'auth': {
                 let authType = authTypes[record.auth.type]
                 let r = authType.commit(record.auth)
@@ -311,12 +313,14 @@ function setIdentity(details) {
                 }
 
                 newAuth = r.commitRecord
-                newAuth.id = identity.auth
+                newAuth.id = uuidv4()
+                newIdentity.auth = newAuth.id
+                break
             }
 
             default: {
-                if (identityFields.includes(uf)) {
-                    newIdentity[uf] = r.cleanRecord[uf]
+                if (identityFields.includes(fieldName)) {
+                    newIdentity[fieldName] = r.cleanRecord[fieldName]
                 }
             }
         }
@@ -328,7 +332,7 @@ function setIdentity(details) {
         auths.splice(i, 1, newAuth)
     }
 
-    i = identities.findIndex((o => o.id = identity.id))
+    i = identities.findIndex((o => o.name === identity.name))
     identities.splice(i, 1, newIdentity)
 
     return { state: 'success', identity: newIdentity }
@@ -384,6 +388,10 @@ function authenticate(details) {
  
     let identity = identities[i]
     let auth = auths.find(o => o.id === identity.auth)
+
+    if (!auth) {
+        return { state: 'serverMissingAuthRecord', reason: 'Authentication record missing.'}
+    }
 
     let authType = authTypes[auth.type]
 
@@ -488,7 +496,7 @@ module.exports.setup = (path, app) => {
 
         if (r.state === 'success') {
             res.status(201)
-            res.end()
+            res.send(JSON.stringify(r))
             return
         }
 
@@ -507,6 +515,33 @@ module.exports.setup = (path, app) => {
     app.get(`${path}/identity`, (req, res) => {
         res.status(200)
         res.send(getIdentities())
+    })
+
+    /**
+     * Update identity endpoint.
+     */
+    app.patch(`${path}/identity`, (req, res) => {
+        if (!req.body) {
+            res.status(400)
+            res.send(JSON.stringify({status: 'requestError', reason: 'No user details provided.'}))
+            return
+        }
+
+        let r = setIdentity(req.body) 
+
+        if (r.state === 'success') {
+            res.status(200)
+            res.send(JSON.stringify(r))
+            return
+        }
+
+        if (r.state.match(/^request/)) {
+            res.status(400)
+        } else {
+            res.status(500)
+        }
+        
+        res.send(JSON.stringify(r))
     })
 
     /**
