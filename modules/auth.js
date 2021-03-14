@@ -17,13 +17,18 @@ const authTypes = {
 var identities = [
     {
         name: 'admin',
-        auth: {
-            type: 'password',
-            password: 'Pa$$w0rd',
-            salt: 'fcbca933-7021-432b-836d-c1142b1f310d',
-            hash: '5a59750c5ae9eec93736464df0aabc3ff21c576078cd6fa378f0067589a715997e188a06ce98e2e4c4d01749d754b281032910e261dce397bf6b574cbc2b5345'
-        },
+        auth: 'c00df22f-03bf-4200-bed7-cbaff8148e89',
         functions: ['auth.identity', 'api']
+    }
+]
+
+var auths = [
+    {
+        id:'c00df22f-03bf-4200-bed7-cbaff8148e89',
+        type: 'password',
+        password: 'Pa$$w0rd',
+        salt: 'fcbca933-7021-432b-836d-c1142b1f310d',
+        hash: '5a59750c5ae9eec93736464df0aabc3ff21c576078cd6fa378f0067589a715997e188a06ce98e2e4c4d01749d754b281032910e261dce397bf6b574cbc2b5345'
     }
 ]
 
@@ -241,7 +246,12 @@ function addIdentity(details){
             if (r.state !== 'success') {
                 return r
             }
-            record.auth = r.commitRecord
+
+            r.commitRecord.id = uuidv4()
+
+            auths.push(r.commitRecord)
+
+            record.auth = r.commitRecord.id
         } catch (e) {
             console.log(`Error occured while committing authentication details:`)
             console.log(e)
@@ -269,38 +279,59 @@ function addIdentity(details){
  * @param {object} details - Updated details for the identity
  */
 function setIdentity(details) {
-    
+
+    // Step 0, validate:
     let r = validateIdentitySpec(details)
 
     if (!r.pass) {
         return r
     }
 
+    // Step 1, prepare update:
     var record = r.cleanRecord
 
     let i = identities.findIndex((o) => o.name == name )
     let identity = identities[i]
+    let newIdentity = Object.assign({}, identity)
+
+    let newAuth = null
 
     let identityFields = Object.keys(identity)
     let updateFields = Object.keys(record)
 
+    // Step 2, attempt to apply all new settigns:
     for (var uf in updateFields) {
         switch(uf) {
             case 'auth': {
                 let authType = authTypes[record.auth.type]
-                let commitRecord = authType.commit(record.auth)
-                identity.auth = commitRecord
+                let r = authType.commit(record.auth)
+
+                if (r.state !== 'success') {
+                    return { state: 'serverAuthCommitFailed', reason: 'Failed to commit the new authentication details.' }
+                }
+
+                newAuth = r.commitRecord
+                newAuth.id = identity.auth
             }
 
             default: {
                 if (identityFields.includes(uf)) {
-                    identity[uf] = r.cleanRecord[uf]
+                    newIdentity[uf] = r.cleanRecord[uf]
                 }
             }
         }
     }
 
-    return { state: 'success', identity: identity }
+    // Step 3, Commit changes:
+    if (newAuth) {
+        let i = auths.findIndex((o) => o.id === identity.auth)
+        auths.splice(i, 1, newAuth)
+    }
+
+    i = identities.findIndex((o => o.id = identity.id))
+    identities.splice(i, 1, newIdentity)
+
+    return { state: 'success', identity: newIdentity }
 }
 
 /**
@@ -323,9 +354,13 @@ function removeIdentity(name){
         return r
     }
 
-    let i = identities.findIndex((o) => o.name == name )
+    let identityI = identities.findIndex((o) => o.name == name )
+    let authId = identities[identityI].auth
+    let authI  = auths.findIndex((o) => o.id === authId)
 
-    identities.splice(i, 1)
+    auths.splice(authI, 1)
+    identities.splice(identityI, 1)
+    
     return { state: 'success' }
 }
 
@@ -348,11 +383,12 @@ function authenticate(details) {
     )
  
     let identity = identities[i]
+    let auth = auths.find(o => o.id === identity.auth)
+
+    let authType = authTypes[auth.type]
+
+    r = authType.authenticate(auth, details)
     
-    let authType = authTypes[identity.auth.type]
-
-    r = authType.authenticate(identity.auth, details)
-
     if (r.state !== 'success') {
         return r
     }
