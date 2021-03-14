@@ -8,13 +8,31 @@ const {v4: uuidv4} = require('uuid')
 
 const secret = uuidv4()
 
-// Temporary hard-coded list of supported authentication types.
+/**
+ * Temporary hard-coded list of supported authentication types.
+ *
+ * Each authentication type should have be defined by a
+ * corresponding autehntication provider.
+ * 
+ * A authentication provider is a module that exports 3 functions:
+ *  + Authenticate: Given the authentication details for an
+ *      identity and login details provided by the user, this
+ *      function should verify whether the login details are
+ *      correct.
+ *  + Validate: Given the authentication details for an identity,
+ *      this function should verify that the details are correct,
+ *      complete and could be used to verify login details.
+ *  + Commit: Given the authentication details for an identity,
+ *      should perform any tasks needed to enable verification using
+ *      the  "authenticate" function.
+ */
+// TODO: Write a function to dynamically import authentication providers
 const authTypes = {
     password: require('./authProviders/password/module')
 }
 
-// Temporary list of users, this should be moved into a DB and the password should be stored as a salted hash.
-var identities = [
+// Temporary list of users, this should be moved into a DB.
+var identityRecords = [
     {
         id: '59370df8-0a9a-4c01-b711-a8190e963bd4',
         name: 'admin',
@@ -23,11 +41,12 @@ var identities = [
     }
 ]
 
-var auths = [
+// Temporary list of authentication details, this should be moved into a DB.
+var authenticationRecords = [
     {
         id:'c00df22f-03bf-4200-bed7-cbaff8148e89',
         type: 'password',
-        password: 'Pa$$w0rd',
+        //password: 'Pa$$w0rd',
         salt: 'fcbca933-7021-432b-836d-c1142b1f310d',
         hash: '5a59750c5ae9eec93736464df0aabc3ff21c576078cd6fa378f0067589a715997e188a06ce98e2e4c4d01749d754b281032910e261dce397bf6b574cbc2b5345'
     }
@@ -83,7 +102,7 @@ function verifyToken(token) {
  * Verifies a set of identity details versus the expected format and returns a sanitized record if successful.
  * 
  * By default the only compulsory detail is 'name', since this is currently
- * used as the primary key for identities.
+ * used as the primary key for identityRecords.
  * 
  * 3 fields will be validated: 'name', 'auth' and 'functions'.
  * 
@@ -124,7 +143,7 @@ function validateIdentitySpec(details, options) {
         return {state: 'requestError', reason: `Invalid name format (should match regex ${nameRegex}).`}
     }
 
-    let i = identities.findIndex((o) => o.name == details.name )
+    let i = identityRecords.findIndex((o) => o.name == details.name )
 
     if (options.newIdentity) {
         if (i != -1) {
@@ -223,7 +242,7 @@ function validateIdentitySpec(details, options) {
  * Adds a new identity to the authentication system.
  * 
  * The Following details should be provided:
- *  - name: The name of the identity, this is currently the primary key for identities.
+ *  - name: The name of the identity, this is currently the primary key for identityRecords.
  *  - auth: Authentication details. This should be an object with a field called 'type'
  *      indicating which authentication method to use, along with any details required
  *      to authenticate using that method.
@@ -250,7 +269,7 @@ function addIdentity(details){
 
             r.commitRecord.id = uuidv4()
 
-            auths.push(r.commitRecord)
+            authenticationRecords.push(r.commitRecord)
 
             record.auth = r.commitRecord.id
         } catch (e) {
@@ -259,7 +278,7 @@ function addIdentity(details){
             return { state: 'serverAuthCommitFailed', reason: 'An exception occured while commiting authentication details.' }
         }
 
-        identities.push(record)
+        identityRecords.push(record)
         return { state: 'success', identity: record }
     } else {
         return r
@@ -270,7 +289,7 @@ function addIdentity(details){
  * Updates an existing identity with the given details.
  * 
  * The Following details should be provided:
- *  - name: The name of the identity, this is currently the primary key for identities.
+ *  - name: The name of the identity, this is currently the primary key for identityRecords.
  *  - auth: Authentication details. This should be an object with a field called 'type'
  *      indicating which authentication method to use, along with any details required
  *      to authenticate using that method.
@@ -291,8 +310,8 @@ function setIdentity(details) {
     // Step 1, prepare update:
     var record = r.cleanRecord
 
-    let i = identities.findIndex((o) => o.name == details.name )
-    let identity = identities[i]
+    let i = identityRecords.findIndex((o) => o.name == details.name )
+    let identity = identityRecords[i]
     let newIdentity = Object.assign({}, identity)
 
     let newAuth = null
@@ -328,21 +347,21 @@ function setIdentity(details) {
 
     // Step 3, Commit changes:
     if (newAuth) {
-        let i = auths.findIndex((o) => o.id === identity.auth)
-        auths.splice(i, 1, newAuth)
+        let i = authenticationRecords.findIndex((o) => o.id === identity.auth)
+        authenticationRecords.splice(i, 1, newAuth)
     }
 
-    i = identities.findIndex((o => o.name === identity.name))
-    identities.splice(i, 1, newIdentity)
+    i = identityRecords.findIndex((o => o.name === identity.name))
+    identityRecords.splice(i, 1, newIdentity)
 
     return { state: 'success', identity: newIdentity }
 }
 
 /**
- * Returns all of the identities in the authentication store.
+ * Returns all of the identityRecords in the authentication store.
  */
-function getIdentities() {
-    return JSON.stringify(identities)
+function getidentityRecords() {
+    return JSON.stringify(identityRecords)
 }
 
 /**
@@ -358,12 +377,12 @@ function removeIdentity(name){
         return r
     }
 
-    let identityI = identities.findIndex((o) => o.name == name )
-    let authId = identities[identityI].auth
-    let authI  = auths.findIndex((o) => o.id === authId)
+    let identityI = identityRecords.findIndex((o) => o.name == name )
+    let authId = identityRecords[identityI].auth
+    let authI  = authenticationRecords.findIndex((o) => o.id === authId)
 
-    auths.splice(authI, 1)
-    identities.splice(identityI, 1)
+    authenticationRecords.splice(authI, 1)
+    identityRecords.splice(identityI, 1)
     
     return { state: 'success' }
 }
@@ -382,12 +401,12 @@ function authenticate(details) {
         return r
     }
 
-    var i = identities.findIndex((o) =>
+    var i = identityRecords.findIndex((o) =>
         details.name == o.name
     )
  
-    let identity = identities[i]
-    let auth = auths.find(o => o.id === identity.auth)
+    let identity = identityRecords[i]
+    let auth = authenticationRecords.find(o => o.id === identity.auth)
 
     if (!auth) {
         return { state: 'serverMissingAuthRecord', reason: 'Authentication record missing.'}
@@ -510,11 +529,11 @@ module.exports.setup = (path, app) => {
     })
 
     /**
-     * Get identities endpoint
+     * Get identityRecords endpoint
      */
     app.get(`${path}/identity`, (req, res) => {
         res.status(200)
-        res.send(getIdentities())
+        res.send(getidentityRecords())
     })
 
     /**
