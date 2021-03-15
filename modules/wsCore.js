@@ -7,18 +7,6 @@ const fs = require('fs')
 var connections = []
 var sockets = {}
 
-const settingsPath = `${__dirname}\server.setings.json`
-
-var settings = null
-
-if (fs.existsSync(settingsPath)) {
-    let settingsRaw = fs.readFileSync(settingsPath)
-    settings = JSON.stringify(settingsRaw.toString())
-} else {
-    settings = {}
-}
-
-
 function log(msg) {
     console.log(`${DateTime.now()} | ${msg}`)
 }
@@ -96,7 +84,6 @@ var providers = loadProviders()
 
 const coreEnv = {
     'providers': providers,
-    'settings': settings,
     'log': log
 }
 
@@ -358,7 +345,10 @@ providers.connection = {
     send: send
 }
 
-module.exports.setup = (path, app) => {
+module.exports.setup = (path, app, settings) => {
+
+    coreEnv.settings = settings
+
     app.use(path, (req, res, next) => {
         
         if (verifyReqAuthentication(req)) {
