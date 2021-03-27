@@ -92,16 +92,28 @@ if (!server) {
     server = require('http').createServer(app)
 }
 
-
 expressws(app, server)
 
 app.use(bodyParser.json())
 app.use(auth.mw_verify)
-auth.setup('/auth', app, settings)
-wsCore.setup('/api', app, settings)
 
 
 
-server.listen(port, () => {
-    console.log(`${new Date()}: Listening on port ${port}.`)
+const mongoClient = require('mongodb').MongoClient
+
+var database = null
+
+mongoClient.connect(settings.database.connectionString).then(client => {
+    console.log('DB server connected.')
+    database = client.db(settings.database.dbname)
+
+    auth.setup('/auth', app, settings, database)
+    wsCore.setup('/api', app, settings, database)
+
+    server.listen(port, () => {
+        console.log(`${new Date()}: Listening on port ${port}.`)
+    })
+}).catch(err => {
+    console.log('Failed to connect to database server.')
+    console.log(err)
 })
