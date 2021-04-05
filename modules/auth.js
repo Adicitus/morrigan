@@ -560,11 +560,29 @@ module.exports.setup = async (path, app, settings, database) => {
     app.get(`${path}/identity`, (req, res) => {
         identityRecords.find().toArray().then(o => {
             res.status(200)
-            res.send(JSON.stringify(o))
+            res.send(JSON.stringify({state: 'success', identities: o}))
         }).catch(e => {
             console.log(e)
             res.status(500)
-            res.end()
+            res.send(JSON.stringify({state: 'serverError', reason: 'Failed to retrieve identity records.'}))
+        })
+    })
+
+    /**
+     * Get specific identityRecord endpoint
+     */
+    app.get(`${path}/identity/:identityId`, (req, res) => {
+        identityRecords.find({ name: req.params.identityId }).toArray().then(o => {
+            if (o.length === 0) {
+                res.status(404)
+                res.send(JSON.stringify({state: 'requestError', reason: 'No such identity.'}))
+            }
+            res.status(200)
+            res.send(JSON.stringify({state: 'success', identity: o[0]}))
+        }).catch(e => {
+            console.log(e)
+            res.status(500)
+            res.send(JSON.stringify({state: 'serverError', reason: 'Failed to retrieve identity records.'}))
         })
     })
 

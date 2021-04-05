@@ -23,10 +23,10 @@ Invoke-RestMethod -Uri http://localhost/auth/identity -Method Post -Body (@{
     }
 } | ConvertTo-Json) -ContentType application/json -Headers $headers | ConvertTo-Json -Depth 10 | Write-Host
 
-"Getting new user list..." | Write-Host -ForegroundColor Cyan
-Invoke-RestMethod -Uri http://localhost/auth/identity/ -Method get -Headers $headers | ConvertTo-Json -Depth 10 | Write-Host
+"Getting new user record..." | Write-Host -ForegroundColor Cyan
+Invoke-RestMethod -Uri "http://localhost/auth/identity/$($testUsername)" -Method get -Headers $headers | ConvertTo-Json -Depth 10 | Write-Host
 
-"Changing $($testUsername)'s password to '$($testPassword2)' and adding the following functions: $(($newFunctions -join ','))...." | Write-Host -ForegroundColor Cyan
+"Changing $($testUsername)'s password to '$($testPassword2)' and adding the following functions: $(($newFunctions -join ', '))...." | Write-Host -ForegroundColor Cyan
 Invoke-RestMethod -Uri http://localhost/auth/identity -Method Patch -Body (@{
     name = $testUsername
     auth = @{
@@ -35,9 +35,6 @@ Invoke-RestMethod -Uri http://localhost/auth/identity -Method Patch -Body (@{
     }
     functions = $newFunctions
 } | ConvertTo-Json ) -ContentType application/json -Headers $headers | ConvertTo-Json -Depth 10 | write-Host
-
-"Getting new user list..." | Write-Host -ForegroundColor Cyan
-Invoke-RestMethod -Uri http://localhost/auth/identity/ -Method get -Headers $headers | ConvertTo-Json -Depth 10 | Write-Host
 
 "Getting authentication token for $($testUsername)..." | Write-Host -ForegroundColor Cyan
 $token2 = Invoke-RestMethod -Uri http://localhost/auth -Body (@{ name = $testUsername; password = $testPassword2 } | ConvertTo-Json -Depth 10) -Method Post -ContentType application/json
