@@ -2,6 +2,15 @@
 
 "use strict"
 
+const modulename = 'auth'
+const functions = {
+    identity: { 
+        fullname: `${modulename}.identity`,
+        description: "Allowed to administer all identities"
+    }
+}
+module.exports.functions = functions
+
 const { DateTime } = require('luxon')
 const jwt = require('jsonwebtoken')
 const {v4: uuidv4} = require('uuid')
@@ -32,7 +41,9 @@ const authTypes = {
 }
 
 // Temporary list of users, this should be moved into a DB.
-var identityRecords = [
+var identityRecords = null
+
+var identityRecordsDefault = [
     {
         id: '59370df8-0a9a-4c01-b711-a8190e963bd4',
         name: 'admin',
@@ -42,7 +53,9 @@ var identityRecords = [
 ]
 
 // Temporary list of authentication details, this should be moved into a DB.
-var authenticationRecords = [
+var authenticationRecords = null
+
+var authenticationRecordsDefault = [
     {
         id:'c00df22f-03bf-4200-bed7-cbaff8148e89',
         type: 'password',
@@ -122,7 +135,7 @@ function verifyToken(token) {
  * @param {object} details - Details to be verified.
  * @param {object} options - Options to modify how the functions validates the details.
  */
-function validateIdentitySpec(details, options) {
+async function validateIdentitySpec(details, options) {
 
     const nameRegex     = /[A-z0-9_\-.]+/
     const functionRegex = /[A-z0-9_\-.]+/
@@ -143,14 +156,14 @@ function validateIdentitySpec(details, options) {
         return {state: 'requestError', reason: `Invalid name format (should match regex ${nameRegex}).`}
     }
 
-    let i = identityRecords.findIndex((o) => o.name == details.name )
+    let i = await identityRecords.findOne({ name: details.name })
 
     if (options.newIdentity) {
-        if (i != -1) {
+        if (i) {
             return {state: 'requestError', reason: 'Identity name already in use.'}
         }
     } else {
-        if (i == -1) {
+        if (!i) {
             return {state: 'requestError', reason: 'No such user.'}
         }
     }
@@ -231,10 +244,6 @@ function validateIdentitySpec(details, options) {
         /* ====== End: Validate functions list ====== */
     }
 
-    if (!cleanRecord.functions) {
-        cleanRecord.functions = []
-    }
-
     return {state: 'success', pass: true, cleanRecord: cleanRecord, authType: authType }
 }
 
@@ -252,9 +261,9 @@ function validateIdentitySpec(details, options) {
  * 
  * @param {object} details - Details of the identity to add.
  */
-function addIdentity(details){
+async function addIdentity(details){
 
-    let r = validateIdentitySpec(details, { newIdentity: true })
+    let r = await validateIdentitySpec(details, { newIdentity: true })
 
     if (r.pass) {
 
@@ -266,19 +275,27 @@ function addIdentity(details){
             if (r.state !== 'success') {
                 return r
             }
+            delete record.auth
 
-            r.commitRecord.id = uuidv4()
+            let authRecord = r.commitRecord
 
-            authenticationRecords.push(r.commitRecord)
+            authRecord.id = uuidv4()
 
-            record.authId = r.commitRecord.id
+            authenticationRecords.insertOne(authRecord)
+
+            record.authId = authRecord.id
+
         } catch (e) {
             console.log(`Error occured while committing authentication details:`)
             console.log(e)
             return { state: 'serverAuthCommitFailed', reason: 'An exception occured while commiting authentication details.' }
         }
 
-        identityRecords.push(record)
+        if (!record.functions) {
+            record.functions = []
+        }
+
+        identityRecords.insertOne(record)
         return { state: 'success', identity: record }
     } else {
         return r
@@ -298,10 +315,10 @@ function addIdentity(details){
  * 
  * @param {object} details - Updated details for the identity
  */
-function setIdentity(details) {
+async function setIdentity(details) {
 
     // Step 0, validate:
-    let r = validateIdentitySpec(details)
+    let r = await validateIdentitySpec(details)
 
     if (!r.pass) {
         return r
@@ -310,14 +327,15 @@ function setIdentity(details) {
     // Step 1, prepare update:
     var record = r.cleanRecord
 
-    let i = identityRecords.findIndex((o) => o.name == details.name )
-    let identity = identityRecords[i]
+    let identity = await identityRecords.findOne({ name: details.name })
     let newIdentity = Object.assign({}, identity)
 
     let newAuth = null
 
     let identityFields = Object.keys(identity)
+    console.log(identityFields)
     let updateFields = Object.keys(record)
+    console.log(updateFields)
 
     // Step 2, attempt to apply all new settigns:
     for (var ufi in updateFields) {
@@ -347,21 +365,14 @@ function setIdentity(details) {
 
     // Step 3, Commit changes:
     if (newAuth) {
-        let i = authenticationRecords.findIndex((o) => o.id === identity.authId)
-        authenticationRecords.splice(i, 1, newAuth)
+        r = await authenticationRecords.replaceOne({id: identity.authId}, newAuth)
+        console.log(newAuth)
     }
 
-    i = identityRecords.findIndex((o => o.name === identity.name))
-    identityRecords.splice(i, 1, newIdentity)
+    r = await identityRecords.replaceOne({ id: identity.id}, newIdentity)
+    console.log(newIdentity)
 
     return { state: 'success', identity: newIdentity }
-}
-
-/**
- * Returns all of the identityRecords in the authentication store.
- */
-function getidentityRecords() {
-    return JSON.stringify(identityRecords)
 }
 
 /**
@@ -369,20 +380,19 @@ function getidentityRecords() {
  * 
  * @param {object} name - Name of the identity to remove.
  */
-function removeIdentity(name){
+async function removeIdentity(name){
 
-    let r = validateIdentitySpec({name: name})
+    let r = await validateIdentitySpec({name: name})
 
     if (!r.pass) {
         return r
     }
 
-    let identityI = identityRecords.findIndex((o) => o.name == name )
-    let authId = identityRecords[identityI].authId
-    let authI  = authenticationRecords.findIndex((o) => o.id === authId)
+    let identity = await identityRecords.findOne({ name: name } )
+    let authId = identity.authId
 
-    authenticationRecords.splice(authI, 1)
-    identityRecords.splice(identityI, 1)
+    await authenticationRecords.removeOne({ id: authId })
+    await identityRecords.removeOne({id: identity.id})
     
     return { state: 'success' }
 }
@@ -393,20 +403,16 @@ function removeIdentity(name){
  * 
  * @param {object} details - Authentication details that should be validated.
  */
-function authenticate(details) {
+async function authenticate(details) {
 
-    let r = validateIdentitySpec(details)
+    let r = await validateIdentitySpec(details)
 
     if (!r.pass) {
         return r
     }
 
-    var i = identityRecords.findIndex((o) =>
-        details.name == o.name
-    )
- 
-    let identity = identityRecords[i]
-    let auth = authenticationRecords.find(o => o.id === identity.authId)
+    let identity = await identityRecords.findOne({ name: details.name })
+    let auth = await authenticationRecords.findOne( { id: identity.authId })
 
     if (!auth) {
         return { state: 'serverMissingAuthRecord', reason: 'Authentication record missing.'}
@@ -442,16 +448,33 @@ module.exports.verifyToken = verifyToken
  *  - ${path}/clientToken
  * @param {string} path - Base path to set up the authentication endpoints under.
  * @param {object} app - Express application to set up the authentication endpoints on.
+ * @param {object} settings - 
  */
-module.exports.setup = (path, app) => {
+module.exports.setup = async (path, app, settings, database) => {
     
+    identityRecords = database.collection('identities')
+    authenticationRecords = database.collection('authentication')
+
+    let identities = await identityRecords.find().toArray()
+    let authentications = await await authenticationRecords.find().toArray()
+
+    console.log(`Registered identities: ${identities.length}`)
+    console.log(`Registered authentications: ${authentications.length}`)
+
+    if (identities.length === 0) {
+        let r = identityRecords.insertMany(identityRecordsDefault)
+        console.log(r)
+        r = authenticationRecords.insertMany(authenticationRecordsDefault)
+        console.log(r)
+    }
+
     /**
      * Authentication endpoint.
      */
-    app.post(path, (req, res) => {
+    app.post(path, async (req, res) => {
         
-        var r = authenticate(req.body)
-    
+        var r = await authenticate(req.body)
+
         if (r.token) {
             res.status(200)
             res.send(JSON.stringify(r))
@@ -471,6 +494,9 @@ module.exports.setup = (path, app) => {
                     res.status(403)
                     break
                 }
+                default: {
+                    res.status(500)
+                }
             }
             res.send(JSON.stringify(r))
         }
@@ -489,7 +515,7 @@ module.exports.setup = (path, app) => {
 
         let fs = req.authenticated.functions
 
-        if (!fs || !fs.includes('auth.identity')) {
+        if (!fs || !fs.includes(functions.identity.fullname)) {
             res.status(403)
             res.end()
             return
@@ -501,7 +527,7 @@ module.exports.setup = (path, app) => {
     /**
      * Add identity endpoint.
      */
-    app.post(`${path}/identity`, (req, res) => {
+    app.post(`${path}/identity`, async (req, res) => {
         
         if (!req.body) {
             res.status(400)
@@ -511,7 +537,7 @@ module.exports.setup = (path, app) => {
 
         let details = req.body
 
-        let r = addIdentity(details)
+        let r = await addIdentity(details)
 
         if (r.state === 'success') {
             res.status(201)
@@ -532,21 +558,27 @@ module.exports.setup = (path, app) => {
      * Get identityRecords endpoint
      */
     app.get(`${path}/identity`, (req, res) => {
-        res.status(200)
-        res.send(getidentityRecords())
+        identityRecords.find().toArray().then(o => {
+            res.status(200)
+            res.send(JSON.stringify(o))
+        }).catch(e => {
+            console.log(e)
+            res.status(500)
+            res.end()
+        })
     })
 
     /**
      * Update identity endpoint.
      */
-    app.patch(`${path}/identity`, (req, res) => {
+    app.patch(`${path}/identity`, async (req, res) => {
         if (!req.body) {
             res.status(400)
             res.send(JSON.stringify({status: 'requestError', reason: 'No user details provided.'}))
             return
         }
 
-        let r = setIdentity(req.body) 
+        let r = await setIdentity(req.body)
 
         if (r.state === 'success') {
             res.status(200)
@@ -566,8 +598,8 @@ module.exports.setup = (path, app) => {
     /**
      * Remove identity endpoint
      */
-    app.delete(`${path}/identity/:identityId`, (req, res) => {
-        let r = removeIdentity(req.params.identityId)
+    app.delete(`${path}/identity/:identityId`, async (req, res) => {
+        let r = await removeIdentity(req.params.identityId)
 
         if (r.state === 'success') {
             res.status(200)
@@ -581,12 +613,12 @@ module.exports.setup = (path, app) => {
 
 // Middleware to verify the authorization header.
 // Adds req.authenticated with user details if authorization is validated.
-module.exports.mw_verify = (req, res, next) => {
+module.exports.mw_verify = async (req, res, next) => {
     var auth = req.headers.authorization
 
     if (auth) {
         var m = auth.match(/^(?<type>bearer) (?<token>.+)/)
-
+        
         if (m) {
             var p = verifyToken(m.groups.token)
             
