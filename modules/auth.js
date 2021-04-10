@@ -3,13 +3,74 @@
 "use strict"
 
 const modulename = 'auth'
-const functions = {
-    identity: { 
-        fullname: `${modulename}.identity`,
-        description: "Allowed to administer all identities"
+const access = {
+    identity: {
+        description: "Allowed to access identity functions.",
+
+        create: {
+            description: "Allowed to create new identities."
+        },
+
+        get: {
+            all: {
+                description: "Allowed to read any identity."
+            }
+        },
+
+        update: {
+            all: {
+                description: "Allowed to update any identity."
+            }
+        },
+
+        delete: {
+            all: {
+                description: "Allowed to remove any identity."
+            }
+        }
     }
 }
-module.exports.functions = functions
+
+/**
+ * Helper function to turn the "access" object into an access right list.
+ * 
+ * Recursively processes all keys in the "scope" object, interpreting any key that
+ * addresses an obejct with a "description" key as the name of a function to list access for.
+ * 
+ * 
+ * 
+ * @param {string} prefix 
+ * @param {object} scope 
+ */
+function buildAccessRightsList(prefix, scope) {
+
+    var ar_ns = Object.keys(scope)
+    
+    let ars = []
+
+    for(var i in ar_ns) {
+        let name = ar_ns[i]
+
+        let fullname = `${prefix}.${name}`
+        
+        if (scope[name].description) {
+            ars.push({ name: fullname, description: scope[name].description })
+            scope[name].fullname = fullname
+        }
+
+        if (typeof scope[name] === 'object') {
+            let ars_r = buildAccessRightsList(fullname, scope[name])
+            ars = ars.concat(ars_r)
+        }
+    }
+
+    return ars
+}
+
+module.exports.name = modulename
+module.exports.functions = buildAccessRightsList(modulename, access)
+
+console.log(access)
 
 const { DateTime } = require('luxon')
 const jwt = require('jsonwebtoken')
@@ -77,6 +138,7 @@ var authenticationRecordsDefault = [
 function newToken(identity, options) {
     var now = DateTime.now()
     var payload = {
+        id: identity.id,
         name: identity.name,
         iat: Math.round(now.toSeconds()),
         exp: Math.round(now.plus({minutes: 30}).toSeconds())
@@ -148,26 +210,28 @@ async function validateIdentitySpec(details, options) {
     }
 
     /* ===== Start: Validate name ===== */
-    if (!details.name) {
-        return {state: 'requestError', reason: 'No user specified.'}
+    if (options.newIdentity && !details.name) {
+        return {state: 'requestError', reason: 'No user name specified.'}
     }
 
-    if (!details.name || !details.name.match(nameRegex)) {
+    if (details.name && !details.name.match(nameRegex)) {
         return {state: 'requestError', reason: `Invalid name format (should match regex ${nameRegex}).`}
     }
 
-    let i = await identityRecords.findOne({ name: details.name })
+    if (details.name) {
+        let i = await identityRecords.findOne({ name: details.name })
 
-    if (options.newIdentity) {
-        if (i) {
-            return {state: 'requestError', reason: 'Identity name already in use.'}
+        if (options.newIdentity) {
+            if (i) {
+                return {state: 'requestError', reason: 'Identity name already in use.'}
+            }
+        } else {
+            if (!i) {
+                return {state: 'requestError', reason: 'No such user.'}
+            }
         }
-    } else {
-        if (!i) {
-            return {state: 'requestError', reason: 'No such user.'}
-        }
+        cleanRecord.name = details.name
     }
-    cleanRecord.name = details.name
     /* ====== End: Validate name ====== */
 
     
@@ -315,7 +379,11 @@ async function addIdentity(details){
  * 
  * @param {object} details - Updated details for the identity
  */
-async function setIdentity(details) {
+async function setIdentity(identityId, details, options) {
+
+    if (!options) {
+        options = {}
+    }
 
     // Step 0, validate:
     let r = await validateIdentitySpec(details)
@@ -327,7 +395,7 @@ async function setIdentity(details) {
     // Step 1, prepare update:
     var record = r.cleanRecord
 
-    let identity = await identityRecords.findOne({ name: details.name })
+    let identity = await identityRecords.findOne({ id: identityId })
     let newIdentity = Object.assign({}, identity)
 
     let newAuth = null
@@ -355,11 +423,21 @@ async function setIdentity(details) {
                 break
             }
 
+            case 'functions': {
+                if (options.allowSecurityEdit) {
+                    newIdentity[fieldName] = r.cleanRecord[fieldName]
+                }
+            }
+
             default: {
                 if (identityFields.includes(fieldName)) {
                     newIdentity[fieldName] = r.cleanRecord[fieldName]
                 }
             }
+
+            // Do not allow changing the ID fields.
+            case 'id':  { break }
+            case '_id':  { break }
         }
     }
 
@@ -378,17 +456,17 @@ async function setIdentity(details) {
 /**
  * Removes an identity from the authentication store.
  * 
- * @param {object} name - Name of the identity to remove.
+ * @param {object} identitiyId - Id of the identity to remove.
  */
-async function removeIdentity(name){
+async function removeIdentity(identityId){
 
-    let r = await validateIdentitySpec({name: name})
+    let r = await validateIdentitySpec({id: identityId})
 
     if (!r.pass) {
         return r
     }
 
-    let identity = await identityRecords.findOne({ name: name } )
+    let identity = await identityRecords.findOne({id: identityId})
     let authId = identity.authId
 
     await authenticationRecords.removeOne({ id: authId })
@@ -448,7 +526,8 @@ module.exports.verifyToken = verifyToken
  *  - ${path}/clientToken
  * @param {string} path - Base path to set up the authentication endpoints under.
  * @param {object} app - Express application to set up the authentication endpoints on.
- * @param {object} settings - 
+ * @param {object} settings - Configuration settings.
+ * @param {object} databse  - MongoDB database.
  */
 module.exports.setup = async (path, app, settings, database) => {
     
@@ -466,6 +545,25 @@ module.exports.setup = async (path, app, settings, database) => {
         console.log(r)
         r = authenticationRecords.insertMany(authenticationRecordsDefault)
         console.log(r)
+    }
+
+    
+    /**
+     * Helper function used by endpoints to ensure that the caller is authenticated and has access to the given function.
+     * @param {object} req Request object
+     * @param {object} res Response object
+     * @param {string} functionName Name of the function to test for.
+     */
+    function allowAccess(req, res, functionName) {
+
+
+        if (req.authenticated && req.authenticated.functions.includes(functionName)) {
+            return true
+        }
+
+        res.status(403)
+        res.end()
+        return false
     }
 
     /**
@@ -503,19 +601,11 @@ module.exports.setup = async (path, app, settings, database) => {
     })
 
     /**
-     * Middleware to protect identity admin functions.
+     * Middleware to protect identity functions.
      */
     app.use(`${path}/identity`, (req, res, next) => {
 
         if (!req.authenticated) {
-            res.status(403)
-            res.end()
-            return
-        }
-
-        let fs = req.authenticated.functions
-
-        if (!fs || !fs.includes(functions.identity.fullname)) {
             res.status(403)
             res.end()
             return
@@ -529,6 +619,8 @@ module.exports.setup = async (path, app, settings, database) => {
      */
     app.post(`${path}/identity`, async (req, res) => {
         
+        if (!allowAccess(req, res, access.identity.create.fullname)) { return }
+
         if (!req.body) {
             res.status(400)
             res.end(JSON.stringify({status: 'requestError', reason: 'No user details provided.'}))
@@ -558,6 +650,8 @@ module.exports.setup = async (path, app, settings, database) => {
      * Get identityRecords endpoint
      */
     app.get(`${path}/identity`, (req, res) => {
+        if (!allowAccess(req, res, access.identity.get.all.fullname)) { return }
+
         identityRecords.find().toArray().then(o => {
             res.status(200)
             res.send(JSON.stringify({state: 'success', identities: o}))
@@ -569,14 +663,39 @@ module.exports.setup = async (path, app, settings, database) => {
     })
 
     /**
-     * Get specific identityRecord endpoint
+     * Get my identityRecord endpoint
      */
-    app.get(`${path}/identity/:identityId`, (req, res) => {
-        identityRecords.find({ name: req.params.identityId }).toArray().then(o => {
+    app.get(`${path}/identity/me`, (req, res) => {
+        identityRecords.find({id: req.authenticated.id}).toArray().then(o => {
             if (o.length === 0) {
                 res.status(404)
                 res.send(JSON.stringify({state: 'requestError', reason: 'No such identity.'}))
+                return
             }
+
+            res.status(200)
+            res.send(JSON.stringify({state: 'success', identity: o[0]}))
+        }).catch(e => {
+            console.log(e)
+            res.status(500)
+            res.send(JSON.stringify({state: 'serverError', reason: 'Failed to retrieve identity records.'}))
+        })
+    })
+
+    /**
+     * Get specific identityRecord endpoint
+     */
+    app.get(`${path}/identity/:identityId`, (req, res) => {
+        if (!allowAccess(req, res, access.identity.get.all.fullname)) { return }
+
+        identityRecords.find({ id: req.params.identityId }).toArray().then(o => {
+            console.log(o)
+            if (o.length === 0) {
+                res.status(404)
+                res.send(JSON.stringify({state: 'requestError', reason: 'No such identity.'}))
+                return
+            }
+
             res.status(200)
             res.send(JSON.stringify({state: 'success', identity: o[0]}))
         }).catch(e => {
@@ -589,14 +708,44 @@ module.exports.setup = async (path, app, settings, database) => {
     /**
      * Update identity endpoint.
      */
-    app.patch(`${path}/identity`, async (req, res) => {
+    app.patch(`${path}/identity/me`, async (req, res) => {
+
         if (!req.body) {
             res.status(400)
             res.send(JSON.stringify({status: 'requestError', reason: 'No user details provided.'}))
             return
         }
 
-        let r = await setIdentity(req.body)
+        let r = await setIdentity(req.authenticated.id, req.body)
+
+        if (r.state === 'success') {
+            res.status(200)
+            res.send(JSON.stringify(r))
+            return
+        }
+
+        if (r.state.match(/^request/)) {
+            res.status(400)
+        } else {
+            res.status(500)
+        }
+        
+        res.send(JSON.stringify(r))
+    })
+
+    /**
+     * Update identity endpoint.
+     */
+    app.patch(`${path}/identity/:identityId`, async (req, res) => {
+        if (!allowAccess(req, res, access.identity.update.all.fullname)) { return }
+
+        if (!req.body) {
+            res.status(400)
+            res.send(JSON.stringify({status: 'requestError', reason: 'No user details provided.'}))
+            return
+        }
+
+        let r = await setIdentity(req.params.identityId, req.body, { allowSecurityEdit: true })
 
         if (r.state === 'success') {
             res.status(200)
@@ -617,6 +766,8 @@ module.exports.setup = async (path, app, settings, database) => {
      * Remove identity endpoint
      */
     app.delete(`${path}/identity/:identityId`, async (req, res) => {
+        if (!allowAccess(req, res, access.identity.delete.all.fullname)) { return }
+
         let r = await removeIdentity(req.params.identityId)
 
         if (r.state === 'success') {

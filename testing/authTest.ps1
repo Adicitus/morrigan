@@ -15,20 +15,27 @@ $headers | ConvertTo-Json -Depth 10 | Write-Host
 Invoke-RestMethod -Uri http://localhost/auth/identity/ -Method get -Headers $headers | ConvertTo-Json -Depth 10 | Write-Host
 
 "Adding new user: $($testUsername)..." | Write-Host -ForegroundColor Cyan
-Invoke-RestMethod -Uri http://localhost/auth/identity -Method Post -Body (@{
+$newUser = Invoke-RestMethod -Uri http://localhost/auth/identity -Method Post -Body (@{
     name = $testUsername
     auth = @{
         type = "password"
         password = $testPassword1
     }
-} | ConvertTo-Json) -ContentType application/json -Headers $headers | ConvertTo-Json -Depth 10 | Write-Host
+} | ConvertTo-Json) -ContentType application/json -Headers $headers
+
+$newUser | ConvertTo-Json -Depth 10 | Write-Host
+
+$newUserId = $newUSer.identity.id
+
+$userURI = "http://localhost/auth/identity/$($newUserId)"
+
+$userURI | Write-Host
 
 "Getting new user record..." | Write-Host -ForegroundColor Cyan
-Invoke-RestMethod -Uri "http://localhost/auth/identity/$($testUsername)" -Method get -Headers $headers | ConvertTo-Json -Depth 10 | Write-Host
+Invoke-RestMethod -Uri $userURI -Method get -Headers $headers | ConvertTo-Json -Depth 10 | Write-Host
 
 "Changing $($testUsername)'s password to '$($testPassword2)' and adding the following functions: $(($newFunctions -join ', '))...." | Write-Host -ForegroundColor Cyan
-Invoke-RestMethod -Uri http://localhost/auth/identity -Method Patch -Body (@{
-    name = $testUsername
+Invoke-RestMethod -Uri $userURI -Method Patch -Body (@{
     auth = @{
         type = "password"
         password = $testPassword2
@@ -40,8 +47,11 @@ Invoke-RestMethod -Uri http://localhost/auth/identity -Method Patch -Body (@{
 $token2 = Invoke-RestMethod -Uri http://localhost/auth -Body (@{ name = $testUsername; password = $testPassword2 } | ConvertTo-Json -Depth 10) -Method Post -ContentType application/json
 $token2 | ConvertTo-Json -Depth 10 | Write-Host
 
+"Getting identity for $($testUsername) using auth/identity/me endpoint..." | Write-Host -ForegroundColor Cyan
+Invoke-RestMethod -Uri http://localhost/auth/identity/me -Method Get -Headers @{ authorization = "bearer $($token2.token)" } | ConvertTo-Json -Depth 10 | Write-Host
+
 "Removing $($testUsername)..." | Write-Host -ForegroundColor Cyan
-Invoke-RestMethod -Uri "http://localhost/auth/identity/$($testUsername)" -Method Delete -Headers $headers | ConvertTo-Json -Depth 10 | Write-Host
+Invoke-RestMethod -Uri $userURI -Method Delete -Headers $headers | ConvertTo-Json -Depth 10 | Write-Host
 
 "Getting new user list..." | Write-Host -ForegroundColor Cyan
 Invoke-RestMethod -Uri http://localhost/auth/identity/ -Method get -Headers $headers | ConvertTo-Json -Depth 10 | Write-Host
