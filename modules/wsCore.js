@@ -2,10 +2,11 @@
 
 const { DateTime } = require('luxon')
 const {v4: uuidv4} = require('uuid')
-const fs = require('fs')
 
 var connections = []
 var sockets = {}
+
+var providers = null
 
 function log(msg) {
     console.log(`${DateTime.now()} | ${msg}`)
@@ -51,47 +52,9 @@ var send = (connectionId, message) => {
     return {status: 'success'}
 }
 
-/**
- * Tries to load all providers from the 'providers' directory (__dirname/providers).
- * 
- * A provider module is a file called module.js in a folder with the name of the provider.
- */
-function loadProviders() {
-    let providers = {}
-    let providersDir = `${__dirname}/providers`
-    let providerNames = fs.readdirSync(providersDir)
-    for (var i in providerNames) {
-        let name = providerNames[i]
-        let providerModulePath = `${providersDir}/${name}/module.js`
-        if (fs.existsSync(providerModulePath)) {
-            try {
-                let provider = require(providerModulePath)
-                providers[name] = provider
-            } catch(e) {
-                log(`Failed to read provider module '${providerModulePath}': ${e}`)
-            }
-        }
-    }
-
-    return providers
-}
-
-// Handlers should be defined as modules and loaded from the 'providers' directory.
-// Provider modules should export a 'version' string and a 'messages' object. Each key on the 'messages' object should
-// define a handler that can accept the message object received from the server, a connection object and a 'record'
-// object containing metadata about the connection (including the clientId of the client associated with the connection).
-var providers = loadProviders()
-
 const coreEnv = {
     'providers': providers,
     'log': log
-}
-
-for (const p in providers) {
-    let provider = providers[p]
-    if (provider.setup) {
-        provider.setup(coreEnv)
-    }
 }
 
 function ep_wsConnect (ws, request) {
@@ -243,7 +206,7 @@ function ep_wsConnect (ws, request) {
         try {
             h(msg, ws, record, coreEnv)
         } catch(e) {
-            log (`Exception thrown while handling message: ${e}`)
+            log (`Exception thrown while handling message (${m.groups.message}): ${e}`)
         }
     })
 
@@ -324,27 +287,6 @@ function ep_send(req, res) {
     res.send(JSON.stringify(r))
 }
 
-/**
- * Connection pseudo-provider is specified here because the connection
- * functionality is a part of wsCore, but declaring a provider allows
- * this functionality to be covered by the same system used to handle
- * other providers.
- */
-providers.connection = {
-    version: '0.1.0.0',
-    endpoints: [
-        {route: '/', method: 'get', handler: ep_getConnections},
-        {route: '/:connectionId', method: 'get', handler: ep_getConnections},
-        {route: '/send/:connectionId', method: 'post', handler: ep_send}
-    ],
-    functions: [
-        'api',
-        'connection',
-        'connection.send'
-    ],
-    send: send
-}
-
 module.exports.setup = (path, app, settings) => {
 
     coreEnv.settings = settings
@@ -363,33 +305,32 @@ module.exports.setup = (path, app, settings) => {
 
     app.ws(`${path}/connect`, ep_wsConnect)
     
-    for (var namespace in providers) {
-        let endpoints = providers[namespace].endpoints
-        if (endpoints && Array.isArray(endpoints)) {
-            for (var i in endpoints) {
-                let endpoint = endpoints[i]
 
-                if (!endpoint.route || typeof(endpoint.route) !== 'string' || !endpoint.route.match(/\/([^/]+(\/[^/]+)*)?/) ) {
-                    log(`Invalid endpoint route specified: ${endpoint.route}`)
-                    continue
-                }
-
-                if (!endpoint.method || typeof(endpoint.method) !== 'string' || !['connect', 'delete', 'get', 'head', 'options', 'patch', 'post', 'put', 'trace'].includes(endpoint.method)) {
-                    log(`Invalid endpoint method specified: ${endpoint.method}`)
-                    continue
-                }
-
-                if (!endpoint.handler || typeof(endpoint.handler) !== 'function') {
-                    log(`Invalid endpoint handler specified: ${endpoint.handler}`)
-                    continue
-                }
-
-                let route = `${path}/${namespace}${endpoint.route}`
-
-                log(`Adding handler for '${endpoint.method.toUpperCase()} ${route}'`)
-
-                app[endpoint.method](route, endpoint.handler)
-            }
+    /**
+     * Connection pseudo-provider is specified here because the connection
+     * functionality is a part of wsCore, but declaring a provider allows
+     * this functionality to be covered by the same system used to handle
+     * other providers.
+     */
+    providers = {
+        connection: {
+            version: '0.1.0.0',
+            endpoints: [
+                {route: '/', method: 'get', handler: ep_getConnections},
+                {route: '/:connectionId', method: 'get', handler: ep_getConnections},
+                {route: '/send/:connectionId', method: 'post', handler: ep_send}
+            ],
+            functions: [
+                'api',
+                'connection',
+                'connection.send'
+            ],
+            send: send
         }
     }
+    
+    providers = require('./providers').setup(app, path, `${__dirname}/providers`, coreEnv, providers)
+
+    coreEnv.providers = providers
+
 }
