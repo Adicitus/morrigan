@@ -97,9 +97,7 @@ const secret = uuidv4()
  *      the  "authenticate" function.
  */
 // TODO: Write a function to dynamically import authentication providers
-const authTypes = {
-    password: require('./authProviders/password/module')
-}
+var authTypes = null
 
 // Temporary list of users, this should be moved into a DB.
 var identityRecords = null
@@ -531,6 +529,8 @@ module.exports.verifyToken = verifyToken
  */
 module.exports.setup = async (path, app, settings, database) => {
     
+    authTypes = require('./providers').setup(app, path, `${__dirname}/authProviders`, { log: (msg) => { console.log(msg) } })
+
     identityRecords = database.collection('identities')
     authenticationRecords = database.collection('authentication')
 
