@@ -329,6 +329,12 @@ module.exports.setup = (path, app, settings) => {
         }
     }
     
+
+    // Handlers should be defined as modules and loaded from the 'providers' directory.
+    // Provider modules should export a 'version' string and a 'messages' object. Each key on the 'messages' object should
+    // define a handler that can accept the message object received from the server, a connection object and a 'record'
+    // object containing metadata about the connection (including the clientId of the client associated with the connection).
+
     providers = require('./providers').setup(app, path, `${__dirname}/providers`, coreEnv, providers)
 
     coreEnv.providers = providers

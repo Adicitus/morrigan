@@ -2,6 +2,16 @@
 const fs = require('fs')
 
 /**
+ * Enumerates and loads providers from the providersDir directory, adding any exported endpoints to
+ * the provided app object.
+ * 
+ * Each provider should be defined as a module in a file called module.js located in a subfolder with the
+ * provider's name under the "providersDir" directory.
+ * 
+ * Endpoints should be exported as an array of objects with the following fields:
+ *  - route: A path to be appended to the "uriRoot" (uriRoot + providerName + route).
+ *  - method: A HTTP method.
+ *  - handler: A function to be  registered as handler fo the endpoint.
  * 
  * @param app Express app to register endpoints on.
  * @param uriRoot The root path that provider endpoints should be registered under.
@@ -10,11 +20,6 @@ const fs = require('fs')
  * @param providers Prepopulated providers. Can be safely omitted.
  */
 module.exports.setup = (app, uriRoot, providersDir, environment, providers) => {
-
-    // Handlers should be defined as modules and loaded from the 'providers' directory.
-    // Provider modules should export a 'version' string and a 'messages' object. Each key on the 'messages' object should
-    // define a handler that can accept the message object received from the server, a connection object and a 'record'
-    // object containing metadata about the connection (including the clientId of the client associated with the connection).
 
     const log = environment.log
 
