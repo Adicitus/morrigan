@@ -102,6 +102,7 @@ var authTypes = null
 
 // Temporary list of users, this should be moved into a DB.
 var identityRecords = null
+var authenticationRecords = null
 
 /**
  * Used to generate a token for the provided identity.
