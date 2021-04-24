@@ -68,7 +68,8 @@ function buildAccessRightsList(prefix, scope) {
 }
 
 module.exports.name = modulename
-module.exports.functions = buildAccessRightsList(modulename, access)
+const accessRights = buildAccessRightsList(modulename, access)
+module.exports.functions = accessRights
 
 console.log(access)
 
@@ -101,28 +102,6 @@ var authTypes = null
 
 // Temporary list of users, this should be moved into a DB.
 var identityRecords = null
-
-var identityRecordsDefault = [
-    {
-        id: '59370df8-0a9a-4c01-b711-a8190e963bd4',
-        name: 'admin',
-        authId: 'c00df22f-03bf-4200-bed7-cbaff8148e89',
-        functions: ['auth.identity', 'api']
-    }
-]
-
-// Temporary list of authentication details, this should be moved into a DB.
-var authenticationRecords = null
-
-var authenticationRecordsDefault = [
-    {
-        id:'c00df22f-03bf-4200-bed7-cbaff8148e89',
-        type: 'password',
-        //password: 'Pa$$w0rd',
-        salt: 'fcbca933-7021-432b-836d-c1142b1f310d',
-        hash: '5a59750c5ae9eec93736464df0aabc3ff21c576078cd6fa378f0067589a715997e188a06ce98e2e4c4d01749d754b281032910e261dce397bf6b574cbc2b5345'
-    }
-]
 
 /**
  * Used to generate a token for the provided identity.
@@ -541,10 +520,17 @@ module.exports.setup = async (path, app, settings, database) => {
     console.log(`Registered authentications: ${authentications.length}`)
 
     if (identities.length === 0) {
-        let r = identityRecords.insertMany(identityRecordsDefault)
-        console.log(r)
-        r = authenticationRecords.insertMany(authenticationRecordsDefault)
-        console.log(r)
+        console.log(`No users in DB, adding 'admin' user...`)
+        let adminUser = await addIdentity({
+            name: 'admin',
+            auth: {
+                type: 'password',
+                password: 'Pa55w.rd'
+            },
+            functions: accessRights.map((ar) => { console.log(ar); return ar.name })
+        })
+        console.log(adminUser)
+        console.log(`'admin' added with ID '${adminUser.id}'`)
     }
 
     
