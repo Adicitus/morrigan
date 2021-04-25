@@ -2,6 +2,8 @@
 
 "use strict"
 
+var log = (msg) => { console.log(msg) }
+
 const modulename = 'auth'
 const access = {
     identity: {
@@ -71,7 +73,7 @@ module.exports.name = modulename
 const accessRights = buildAccessRightsList(modulename, access)
 module.exports.functions = accessRights
 
-console.log(access)
+log(access)
 
 const { DateTime } = require('luxon')
 const jwt = require('jsonwebtoken')
@@ -328,8 +330,8 @@ async function addIdentity(details){
             record.authId = authRecord.id
 
         } catch (e) {
-            console.log(`Error occured while committing authentication details:`)
-            console.log(e)
+            log(`Error occured while committing authentication details:`)
+            log(e)
             return { state: 'serverAuthCommitFailed', reason: 'An exception occured while commiting authentication details.' }
         }
 
@@ -379,9 +381,9 @@ async function setIdentity(identityId, details, options) {
     let newAuth = null
 
     let identityFields = Object.keys(identity)
-    console.log(identityFields)
+    log(identityFields)
     let updateFields = Object.keys(record)
-    console.log(updateFields)
+    log(updateFields)
 
     // Step 2, attempt to apply all new settigns:
     for (var ufi in updateFields) {
@@ -422,11 +424,11 @@ async function setIdentity(identityId, details, options) {
     // Step 3, Commit changes:
     if (newAuth) {
         r = await authenticationRecords.replaceOne({id: identity.authId}, newAuth)
-        console.log(newAuth)
+        log(newAuth)
     }
 
     r = await identityRecords.replaceOne({ id: identity.id}, newIdentity)
-    console.log(newIdentity)
+    log(newIdentity)
 
     return { state: 'success', identity: newIdentity }
 }
@@ -507,9 +509,11 @@ module.exports.verifyToken = verifyToken
  * @param {object} settings - Configuration settings.
  * @param {object} databse  - MongoDB database.
  */
-module.exports.setup = async (path, app, settings, database) => {
+module.exports.setup = async (path, app, settings, database, logFunction) => {
     
-    authTypes = require('./providers').setup(app, path, `${__dirname}/authProviders`, { log: (msg) => { console.log(msg) } })
+    log = logFunction
+
+    authTypes = require('./providers').setup(app, path, `${__dirname}/authProviders`, { 'log': log })
 
     identityRecords = database.collection('identities')
     authenticationRecords = database.collection('authentication')
@@ -517,11 +521,11 @@ module.exports.setup = async (path, app, settings, database) => {
     let identities = await identityRecords.find().toArray()
     let authentications = await await authenticationRecords.find().toArray()
 
-    console.log(`Registered identities: ${identities.length}`)
-    console.log(`Registered authentications: ${authentications.length}`)
+    log(`Registered identities: ${identities.length}`)
+    log(`Registered authentications: ${authentications.length}`)
 
     if (identities.length === 0) {
-        console.log(`No users in DB, adding 'admin' user...`)
+        log(`No users in DB, adding 'admin' user...`)
         let adminUser = await addIdentity({
             name: 'admin',
             auth: {
@@ -532,10 +536,10 @@ module.exports.setup = async (path, app, settings, database) => {
         })
         
         if (adminUser.state === 'success') {
-            console.log(`'admin' added with ID '${adminUser.identity.id}'`)
+            log(`'admin' added with ID '${adminUser.identity.id}'`)
         } else {
-            console.log(`Failed to add user 'admin':`)
-            console.log(adminUser)
+            log(`Failed to add user 'admin':`)
+            log(adminUser)
         }
     }
 
@@ -648,7 +652,7 @@ module.exports.setup = async (path, app, settings, database) => {
             res.status(200)
             res.send(JSON.stringify({state: 'success', identities: o}))
         }).catch(e => {
-            console.log(e)
+            log(e)
             res.status(500)
             res.send(JSON.stringify({state: 'serverError', reason: 'Failed to retrieve identity records.'}))
         })
@@ -668,7 +672,7 @@ module.exports.setup = async (path, app, settings, database) => {
             res.status(200)
             res.send(JSON.stringify({state: 'success', identity: o[0]}))
         }).catch(e => {
-            console.log(e)
+            log(e)
             res.status(500)
             res.send(JSON.stringify({state: 'serverError', reason: 'Failed to retrieve identity records.'}))
         })
@@ -681,7 +685,7 @@ module.exports.setup = async (path, app, settings, database) => {
         if (!allowAccess(req, res, access.identity.get.all.fullname)) { return }
 
         identityRecords.find({ id: req.params.identityId }).toArray().then(o => {
-            console.log(o)
+            log(o)
             if (o.length === 0) {
                 res.status(404)
                 res.send(JSON.stringify({state: 'requestError', reason: 'No such identity.'}))
@@ -691,7 +695,7 @@ module.exports.setup = async (path, app, settings, database) => {
             res.status(200)
             res.send(JSON.stringify({state: 'success', identity: o[0]}))
         }).catch(e => {
-            console.log(e)
+            log(e)
             res.status(500)
             res.send(JSON.stringify({state: 'serverError', reason: 'Failed to retrieve identity records.'}))
         })

@@ -1,4 +1,5 @@
 "use strict"
+const { DateTime } = require('luxon')
 const fs = require('fs')
 
 const settingsPath = `${__dirname}/server.settings.json`
@@ -17,6 +18,10 @@ if (settings.port) {
     port = settings.port
 }
 
+const log = (msg) => {
+    console.log(`${DateTime.now()} | ${msg}`)
+}
+
 process.title = "node-report-server"
 
 const express = require('express')
@@ -33,7 +38,7 @@ var server = null
 
 if (settings.server) {
     if (settings.server.https === true) {
-        console.log('starting as HTTPS server')
+        log('starting as HTTPS server')
 
         let options = {}
 
@@ -52,7 +57,7 @@ if (settings.server) {
                 }
                 
                 if (!fs.existsSync(certPath)) {
-                    console.log(`Missing certificate (expected '${certPath}')`)
+                    log(`Missing certificate (expected '${certPath}')`)
                     return
                 }
 
@@ -62,7 +67,7 @@ if (settings.server) {
                 }
 
                 if (!fs.existsSync(keyPath)) {
-                    console.log(`Missing private key (expected '${keyPath}')`)
+                    log(`Missing private key (expected '${keyPath}')`)
                     return
                 }
 
@@ -70,15 +75,15 @@ if (settings.server) {
                     options.cert = fs.readFileSync(certPath)
                     options.key = fs.readFileSync(keyPath)
                 } catch(e) {
-                    console.log('An exception occured while trying to load certificates:')
-                    console.log(e)
+                    log('An exception occured while trying to load certificates:')
+                    log(e)
                     return
                 }
                 break
             }
 
             default: {
-                console.log(`Unexpected certificate type: ${certType}`)
+                log(`Unexpected certificate type: ${certType}`)
                 return
             }
         }
@@ -88,7 +93,7 @@ if (settings.server) {
 }
 
 if (!server) {
-    console.log('Starting as HTTP server')
+    log('Starting as HTTP server')
     server = require('http').createServer(app)
 }
 
@@ -103,17 +108,17 @@ const mongoClient = require('mongodb').MongoClient
 
 var database = null
 
-mongoClient.connect(settings.database.connectionString).then(client => {
-    console.log('DB server connected.')
+mongoClient.connect(settings.database.connectionString, { useUnifiedTopology: true }).then(client => {
+    log('MongoDB server connected.')
     database = client.db(settings.database.dbname)
 
-    auth.setup('/auth', app, settings, database)
-    wsCore.setup('/api', app, settings, database)
+    auth.setup('/auth', app, settings, database, log)
+    wsCore.setup('/api', app, settings, database, log)
 
     server.listen(port, () => {
-        console.log(`${new Date()}: Listening on port ${port}.`)
+        log(`Listening on port ${port}.`)
     })
 }).catch(err => {
-    console.log('Failed to connect to database server.')
-    console.log(err)
+    log('Failed to connect to database server.')
+    log(err)
 })

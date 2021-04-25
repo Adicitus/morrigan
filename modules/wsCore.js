@@ -287,9 +287,12 @@ function ep_send(req, res) {
     res.send(JSON.stringify(r))
 }
 
-module.exports.setup = (path, app, settings) => {
+module.exports.setup = (path, app, settings, database, logFunction) => {
 
     coreEnv.settings = settings
+
+    log = logFunction
+    coreEnv.log = logFunction
 
     app.use(path, (req, res, next) => {
         
