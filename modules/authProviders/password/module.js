@@ -1,7 +1,7 @@
 const crypto = require('crypto')
 const {v4: uuidv4} = require('uuid')
 
-const passwordRegex = /[A-z0-9_\-.]{8,}/
+const passwordRegex = /.{8,}/
 
 function validateDetails (details, options) {
     if (!details.password) {
