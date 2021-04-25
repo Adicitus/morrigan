@@ -1,25 +1,30 @@
 "use strict"
-const { DateTime } = require('luxon')
+const winston = require('winston')
+const morgan = require('morgan')
 const fs = require('fs')
 
-const settingsPath = `${__dirname}/server.settings.json`
-
-var settings = null
-
-if (fs.existsSync(settingsPath)) {
-    let settingsRaw = fs.readFileSync(settingsPath)
-    settings = JSON.parse(settingsRaw.toString())
-} else {
-    settings = {}
-}
+var settings = require('./server.settings')
 
 var port = 1337
 if (settings.port) {
     port = settings.port
 }
 
-const log = (msg) => {
-    console.log(`${DateTime.now()} | ${msg}`)
+const logFormat = winston.format.printf(({level, message, timestamp}) => {
+    return `${timestamp} ${level.padEnd(7)} | ${message}`
+})
+const logger = winston.createLogger({
+    format: winston.format.combine(
+        winston.format.timestamp(),
+        logFormat
+    ),
+    transports: [ new winston.transports.Console() ]
+})
+const log = (msg, level) => {
+    if (!level) {
+        level = 'info'
+    }
+    logger.log({level: level, message: msg})
 }
 
 process.title = "node-report-server"
@@ -27,7 +32,6 @@ process.title = "node-report-server"
 const express = require('express')
 const expressws = require('express-ws')
 const bodyParser = require('body-parser')
-const morgan = require('morgan')
 
 
 /**
