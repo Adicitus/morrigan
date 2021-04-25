@@ -28,9 +28,19 @@ const express = require('express')
 const expressws = require('express-ws')
 const bodyParser = require('body-parser')
 
-const wsCore = require('./modules/wsCore')
-const auth = require('./modules/auth')
 
+/**
+ * Use the components array to specify which components to use and which order to configure them in.
+ * Components will be configured by calling their .setup method once the database is connected.
+ * 
+ * Loading the components here will prevent the server from starting in case there are any issues
+ * with loading the modules (this is the indended behavior: fail fast).
+ */
+const auth = require('./modules/auth')
+const components = [
+    {module: auth, route: '/auth'},
+    {module: require('./modules/wsCore'), route: '/api'}
+]
 
 var app = express()
 
@@ -108,12 +118,17 @@ const mongoClient = require('mongodb').MongoClient
 
 var database = null
 
-mongoClient.connect(settings.database.connectionString, { useUnifiedTopology: true }).then(client => {
+mongoClient.connect(settings.database.connectionString, { useUnifiedTopology: true }).then(async client => {
     log('MongoDB server connected.')
     database = client.db(settings.database.dbname)
 
-    auth.setup('/auth', app, settings, database, log)
-    wsCore.setup('/api', app, settings, database, log)
+    log('Setting up components...')
+    let promises = []
+    components.forEach(c => {
+        promises.push(c.module.setup(c.route, app, settings, database, log))
+    })
+    await Promise.all(promises)
+    log ('Setup Finished.')
 
     server.listen(port, () => {
         log(`Listening on port ${port}.`)
