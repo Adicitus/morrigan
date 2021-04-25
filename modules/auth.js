@@ -528,10 +528,15 @@ module.exports.setup = async (path, app, settings, database) => {
                 type: 'password',
                 password: 'Pa55w.rd'
             },
-            functions: accessRights.map((ar) => { console.log(ar); return ar.name })
+            functions: accessRights.map((ar) => { return ar.name })
         })
-        console.log(adminUser)
-        console.log(`'admin' added with ID '${adminUser.id}'`)
+        
+        if (adminUser.state === 'success') {
+            console.log(`'admin' added with ID '${adminUser.identity.id}'`)
+        } else {
+            console.log(`Failed to add user 'admin':`)
+            console.log(adminUser)
+        }
     }
 
     
