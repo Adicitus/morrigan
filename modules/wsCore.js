@@ -303,6 +303,7 @@ module.exports.setup = (path, app, settings, database, logFunction) => {
             log(`Unauthenticated connection attempt from ${req.connection.remoteAddress}.`)
             res.status(403)
             res.end()
+            return
         }
     })
 
