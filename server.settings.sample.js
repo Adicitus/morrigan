@@ -13,6 +13,7 @@ module.exports = {
     },
 
     logging: {
-        
+        console: true,
+        logDir: "/reportServer.logs"
     }
 }

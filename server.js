@@ -10,22 +10,11 @@ if (settings.port) {
     port = settings.port
 }
 
-const logFormat = winston.format.printf(({level, message, timestamp}) => {
-    return `${timestamp} ${level.padEnd(7)} | ${message}`
-})
-const logger = winston.createLogger({
-    format: winston.format.combine(
-        winston.format.timestamp(),
-        logFormat
-    ),
-    transports: [ new winston.transports.Console() ]
-})
-const log = (msg, level) => {
-    if (!level) {
-        level = 'info'
-    }
-    logger.log({level: level, message: msg})
+const logger =  require('./modules/logger')
+if (settings.logger) {
+    logger.setup(settings.logger)
 }
+const log = logger.log
 
 process.title = "node-report-server"
 
