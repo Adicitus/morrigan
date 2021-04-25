@@ -36,10 +36,10 @@ const components = [
     {module: require('./modules/wsCore'), route: '/api'}
 ]
 
+// App is defined here since it wil be needed when creating the server.
 var app = express()
 
 var server = null
-
 if (settings.server) {
     if (settings.server.https === true) {
         log('starting as HTTPS server')
@@ -101,8 +101,10 @@ if (!server) {
     server = require('http').createServer(app)
 }
 
+// Apply WebSocket logic to the application/server:
 expressws(app, server)
 
+// Setup request logging:
 app.use(
     morgan(
         '--> :remote-addr :method :url :status - :res[content-length]b :response-time ms',
@@ -113,15 +115,18 @@ app.use(
         }
     )
 )
+
+// All request bodies should be treated as 'application.json':
 app.use(bodyParser.json())
+
+// Add middleware to verify authentication and make authorization details
+// available to downstreams handlers:
 app.use(auth.mw_verify)
 
 
-
-const mongoClient = require('mongodb').MongoClient
-
+// Establish connection to MongoDB:
 var database = null
-
+const mongoClient = require('mongodb').MongoClient
 mongoClient.connect(settings.database.connectionString, { useUnifiedTopology: true }).then(async client => {
     log('MongoDB server connected.')
     database = client.db(settings.database.dbname)
