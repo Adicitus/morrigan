@@ -23,6 +23,8 @@ module.exports.setup = (app, uriRoot, providersDir, environment, providers) => {
 
     const log = environment.log
 
+    log(`Loading providers under '${uriRoot}'...`)
+
     if (!providers) {
         providers = {}
     }
@@ -33,6 +35,7 @@ module.exports.setup = (app, uriRoot, providersDir, environment, providers) => {
         let name = providerNames[i]
         let providerModulePath = `${providersDir}/${name}/module.js`
         if (fs.existsSync(providerModulePath)) {
+            log(`Loading provider '${name}' (${providerModulePath})...`)
             try {
                 let provider = require(providerModulePath)
                 providers[name] = provider
@@ -52,6 +55,9 @@ module.exports.setup = (app, uriRoot, providersDir, environment, providers) => {
     for (var namespace in providers) {
         let endpoints = providers[namespace].endpoints
         if (endpoints && Array.isArray(endpoints)) {
+
+            log (`Registering endpoints for '${namespace}':`)
+
             for (var i in endpoints) {
                 let endpoint = endpoints[i]
 
@@ -72,7 +78,7 @@ module.exports.setup = (app, uriRoot, providersDir, environment, providers) => {
 
                 let route = `${uriRoot}/${namespace}${endpoint.route}`
 
-                log(`Adding handler for '${endpoint.method.toUpperCase()} ${route}'`)
+                log(`${endpoint.method.toUpperCase().padStart(7, ' ')} ${route}`)
 
                 app[endpoint.method](route, endpoint.handler)
             }
