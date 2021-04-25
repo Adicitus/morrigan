@@ -709,6 +709,12 @@ module.exports.setup = async (path, app, settings, database, logFunction) => {
             return
         }
 
+        if (req.body.functions) {
+            res.status(403)
+            res.send(JSON.stringify({status: 'requestError', reason: 'Access to functions cannot be modified via the "me" endpoint.'}))
+            return
+        }
+
         let r = await setIdentity(req.authenticated.id, req.body)
 
         if (r.state === 'success') {
