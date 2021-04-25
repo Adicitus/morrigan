@@ -1,5 +1,5 @@
 param(
-    $hostname = "https://localhost",
+    $hostname = "http://localhost",
     $user = "admin",
     $pass = 'Pa55w.rd'
 )
