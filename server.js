@@ -27,6 +27,7 @@ process.title = "node-report-server"
 const express = require('express')
 const expressws = require('express-ws')
 const bodyParser = require('body-parser')
+const morgan = require('morgan')
 
 
 /**
@@ -109,6 +110,16 @@ if (!server) {
 
 expressws(app, server)
 
+app.use(
+    morgan(
+        '--> :remote-addr :method :url :status - :res[content-length]b :response-time ms',
+        {
+            stream: {
+                write: (msg) => log(msg.trim())
+            }
+        }
+    )
+)
 app.use(bodyParser.json())
 app.use(auth.mw_verify)
 
