@@ -12,7 +12,7 @@ module.exports = {
         dbname: "report-server"
     },
 
-    logging: {
+    logger: {
         console: true,
         logDir: "/reportServer.logs"
     }
