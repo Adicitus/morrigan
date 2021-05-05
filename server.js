@@ -1,5 +1,4 @@
 "use strict"
-const winston = require('winston')
 const morgan = require('morgan')
 const fs = require('fs')
 
