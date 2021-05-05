@@ -59,6 +59,8 @@ const coreEnv = {
 
 function ep_wsConnect (ws, request) {
 
+    var heartBeatCheck = null
+
     var record = {
         id: uuidv4(),
         clientAddress: request.connection.remoteAddress,
@@ -69,10 +71,70 @@ function ep_wsConnect (ws, request) {
 
     connections.push(record)
 
+    var cleanup = () => {
+        if (ws.readyState == 1) {
+            ws.close()
+        }
+        
+        record.isAlive = false
+        record.open = false
+        if (heartBeatCheck) {
+            clearInterval(heartBeatCheck)
+        }
+
+        let i = connections.findIndex((o) => o.id === record.id)
+        connections.splice(i, 1)
+    }
+
     log(`Connection ${record.id} established from ${request.connection.remoteAddress} via ${request.headers.origin}`)
 
+    let r = providers.client.verifyToken(request.headers.origin)
+
+    if (r.state !== 'success') {
+        log(`${record.id} failed authentication attempt. state: '${r.state}', reason: ${r.reason}`)
+        log(`Client sent invalid token, closing connection`)
+        cleanup()
+        return
+    }
+
+    let client = r.client
+
+    log(`Connection ${record.id} authenticated as ${client.id}.`)
+
+    record.authenticated = true
+    record.clientId = client.id
+
+    if (client.connectionId) {
+        let i = connections.findIndex((o) => o.id === client.connectionId)
+        if (i !== -1) {
+            let c = connections[i]
+            if (c.isAlive) {
+                log(`Client '${client.id}' is already active in connection ${connection.id}. Closing this connection.`)
+                cleanup()
+                return
+            }
+
+            connections.splice(i, 1)
+        }
+    }
+
+    client.connectionId = record.id
+    sockets[record.id]  = ws
+
+    ws.send(
+        JSON.stringify({
+            type: 'connection.state',
+            state: 'accepted'
+        })
+    )
+    ws.send(
+        JSON.stringify({
+            type: 'capability.report' 
+        })
+    )
+
     // Heartbeat monitor
-    var heartBeatCheck = setInterval(() => {
+    heartBeatCheck = setInterval(() => {
             if (!record.isAlive) {
                 log(`Heartbeat missed by ${request.connection.remoteAddress}`)
             }
@@ -82,94 +144,12 @@ function ep_wsConnect (ws, request) {
         30000
     )
 
-    var authenticaiontTimeout = setTimeout(() => {
-            if (!record.authenticated) {
-                log(`Client failed to authenticate within 3 seconds, closing connection ${record.id}.`)
-                cleanup()
-                return
-            }
-        },
-        3000
-    )
-
-    var cleanup = () => {
-        if (ws.readyState == 1) {
-            ws.close()
-        }
-        
-        record.isAlive = false
-        record.open = false
-        clearInterval(heartBeatCheck)
-        clearTimeout(authenticaiontTimeout)
-
-        if (!record.clientId) {
-            let i = connections.findIndex((o) => o.id === record.id)
-            connections.splice(i, 1)
-        }
-    }
-
     ws.on('pong', () => {
         record.lastHearbeat = DateTime.now()
         record.isAlive = true
     })
 
     ws.on('message', (message) => {
-        // First message, assumed to be token.
-        if (!record.authenticated) {
-            let r = providers.client.verifyToken(message)
-            
-            if (r.state !== 'success') {
-                log(`${record.id} failed authentication attempt. state: '${r.state}', reason: ${r.reason}`)
-                log(`Client sent invalid token, closing connection`)
-                if (ws.readyState === 1) {
-                    ws.send(JSON.stringify({
-                        type: 'connection.state',
-                        state: 'rejected',
-                        reason: 'Invalid token.'
-                    }))
-                }
-                cleanup()
-                return
-            }
-
-            let client = r.client
-
-            log(`Connection ${record.id} authenticated as ${client.id}.`)
-
-            record.authenticated = true
-            record.clientId = client.id
-
-            if (client.connectionId) {
-                let i = connections.findIndex((o) => o.id === client.connectionId)
-                if (i !== -1) {
-                    let c = connections[i]
-                    if (c.isAlive) {
-                        log(`Client '${client.id}' is already active in connection ${connection.id}. Closing this connection.`)
-                        cleanup()
-                        return
-                    }
-
-                    connections.splice(i, 1)
-                }
-            }
-
-            client.connectionId = record.id
-            sockets[record.id]  = ws
-
-            ws.send(
-                JSON.stringify({
-                    type: 'connection.state',
-                    state: 'accepted'
-                })
-            )
-            ws.send(
-                JSON.stringify({
-                   type: 'capability.report' 
-                })
-            )
-            return
-        }
-
         try {
             var msg = JSON.parse(message)
         } catch(e) {
