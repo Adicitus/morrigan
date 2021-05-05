@@ -15,5 +15,17 @@ module.exports = {
     logger: {
         console: true,
         logDir: "/reportServer.logs"
+    },
+
+    /*
+    api: {
+        // Additional paths to look for providers at:
+        providerPaths: []
+    },
+
+    auth: {
+        // Additional paths to look for authentication providers at:
+        providerPaths: []
     }
+    */
 }

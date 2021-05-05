@@ -511,7 +511,17 @@ module.exports.setup = async (path, app, settings, database, logFunction) => {
     
     log = logFunction
 
-    authTypes = require('./providers').setup(app, path, `${__dirname}/authProviders`, { 'log': log })
+    let providerPaths = [`${__dirname}/authProviders`]
+    if (settings.auth && settings.auth.providerPaths) {
+        let a = settings.auth.providerPaths
+        if (Array.isArray(a)) {
+            providerPaths = providerPaths.concat(a)
+        } else {
+            providerPaths.push(a)
+        }
+    }
+
+    authTypes = require('./providers').setup(app, path, providerPaths, { 'log': log })
 
     identityRecords = database.collection('identities')
     authenticationRecords = database.collection('authentication')

@@ -15,7 +15,7 @@ const fs = require('fs')
  * 
  * @param app Express app to register endpoints on.
  * @param uriRoot The root path that provider endpoints should be registered under.
- * @param providersDir The path to the directory containing provider definitions.
+ * @param providersDir The path to the directory containing provider definitions. This parameter can accept and array of paths to load from multiple locations.
  * @param environment Core environment
  * @param providers Prepopulated providers. Can be safely omitted.
  */
@@ -25,22 +25,39 @@ module.exports.setup = (app, uriRoot, providersDir, environment, providers) => {
 
     log(`Loading providers under '${uriRoot}'...`)
 
+    if (!Array.isArray(providersDir)) {
+        providersDir = [providersDir]
+    }
+
     if (!providers) {
         providers = {}
     }
 
 
-    let providerNames = fs.readdirSync(providersDir)
-    for (var i in providerNames) {
-        let name = providerNames[i]
-        let providerModulePath = `${providersDir}/${name}/module.js`
-        if (fs.existsSync(providerModulePath)) {
-            log(`Loading provider '${name}' (${providerModulePath})...`)
-            try {
-                let provider = require(providerModulePath)
-                providers[name] = provider
-            } catch(e) {
-                log(`Failed to read provider module '${providerModulePath}': ${e}`)
+    for (var dirI in providersDir) {
+        let dir = providersDir[dirI]
+        if (!fs.existsSync(dir)) {
+            log(`Invalid provider directory path provided: ${dir}`)
+            continue
+        }
+
+        let providerNames = fs.readdirSync(dir)
+        if (!providerNames) {
+            log(`Failed to read directory: ${dir}`)
+            continue
+        }
+
+        for (var i in providerNames) {
+            let name = providerNames[i]
+            let providerModulePath = `${dir}/${name}/module.js`
+            if (fs.existsSync(providerModulePath)) {
+                log(`Loading provider '${name}' (${providerModulePath})...`)
+                try {
+                    let provider = require(providerModulePath)
+                    providers[name] = provider
+                } catch(e) {
+                    log(`Failed to read provider module '${providerModulePath}': ${e}`)
+                }
             }
         }
     }
