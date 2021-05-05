@@ -101,15 +101,13 @@ function ep_wsConnect (ws, request) {
 
     log(`Connection ${record.id} authenticated as ${client.id}.`)
 
-    record.authenticated = true
-    record.clientId = client.id
 
     if (client.connectionId) {
         let i = connections.findIndex((o) => o.id === client.connectionId)
         if (i !== -1) {
             let c = connections[i]
             if (c.isAlive) {
-                log(`Client '${client.id}' is already active in connection ${connection.id}. Closing this connection.`)
+                log(`Client '${client.id}' is already active in connection ${c.id}. Closing this connection.`)
                 cleanup()
                 return
             }
@@ -118,31 +116,10 @@ function ep_wsConnect (ws, request) {
         }
     }
 
+    record.authenticated = true
+    record.clientId = client.id
     client.connectionId = record.id
     sockets[record.id]  = ws
-
-    ws.send(
-        JSON.stringify({
-            type: 'connection.state',
-            state: 'accepted'
-        })
-    )
-    ws.send(
-        JSON.stringify({
-            type: 'capability.report' 
-        })
-    )
-
-    // Heartbeat monitor
-    heartBeatCheck = setInterval(() => {
-            if (!record.isAlive) {
-                log(`Heartbeat missed by ${request.connection.remoteAddress}`)
-            }
-            record.isAlive = false
-            ws.ping()
-        },
-        30000
-    )
 
     ws.on('pong', () => {
         record.lastHearbeat = DateTime.now()
@@ -200,6 +177,31 @@ function ep_wsConnect (ws, request) {
         }
         cleanup()
     })
+
+    ws.send(
+        JSON.stringify({
+            type: 'connection.state',
+            state: 'accepted'
+        })
+    )
+    ws.send(
+        JSON.stringify({
+            type: 'capability.report' 
+        })
+    )
+
+    // Heartbeat monitor
+    heartBeatCheck = setInterval(() => {
+            if (!record.isAlive) {
+                log(`Heartbeat missed by ${request.connection.remoteAddress}`)
+            }
+            record.isAlive = false
+            ws.ping()
+        },
+        30000
+    )
+
+    log(`Connection ${record.id} is ready.`)
 
 }
 
