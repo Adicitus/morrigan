@@ -20,12 +20,12 @@ module.exports = {
     /*
     api: {
         // Additional paths to look for providers at:
-        providerPaths: []
+        providerPaths: ['/morrigan/providers']
     },
 
     auth: {
         // Additional paths to look for authentication providers at:
-        providerPaths: []
+        providerPaths: ['/morrigan/auth/providers']
     }
     */
 }
