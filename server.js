@@ -24,7 +24,6 @@ log('Finished setting up logging.')
 log(`Reading server state (looking in '${serverSettings.stateDir}')...`)
 const serverInfo = require('./server.info').build(serverSettings.stateDir)
 log('Finished reading server state.')
-serverInfo.settings = serverSettings
 
 const express = require('express')
 const expressws = require('express-ws')
@@ -176,7 +175,6 @@ mongoClient.connect(serverSettings.database.connectionString, { useUnifiedTopolo
     }
 
     const updateInterval = setInterval(async () => {
-        log('Performing periodic update of instance record...')
         serverRecord.checkInTime = DateTime.now().toISO()
         instances.replaceOne(selector, serverRecord)
     }, 30000)
