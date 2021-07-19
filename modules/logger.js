@@ -41,9 +41,9 @@ module.exports.setup = (settings) => {
             logger.log('info', `Log dir (${settings.logDir}) does not exist, trying to create it...`)
 
             try {
-                fs.mkdirSync(settings.logDir)
+                fs.mkdirSync(settings.logDir, {recursive: true})
             } catch(e) {
-                logger.log('error', `Failed to create log directory (${settings.logDir})`)
+                logger.log('error', `Failed to create log directory.`)
                 logger.log('error', JSON.stringify(e))
                 return
             }

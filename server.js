@@ -2,20 +2,26 @@
 const morgan = require('morgan')
 const fs = require('fs')
 
-var settings = require('./server.settings')
+process.title = "morrigan.server"
+
+const serverSettings = require('./server.settings')
+const serverInfo = require('./server.info')
+const serverRecord = {
+    info: serverInfo,
+    settings: serverSettings
+}
 
 var port = 1337
-if (settings.port) {
-    port = settings.port
+if (serverSettings.http.port) {
+    port = serverSettings.http.port
 }
 
+console.log('Setting up logging...')
 const logger =  require('./modules/logger')
-if (settings.logger) {
-    logger.setup(settings.logger)
+if (serverSettings.logger) {
+    logger.setup(serverSettings.logger)
 }
 const log = logger.log
-
-process.title = "node-report-server"
 
 const express = require('express')
 const expressws = require('express-ws')
@@ -39,8 +45,8 @@ const components = [
 var app = express()
 
 var server = null
-if (settings.server) {
-    if (settings.server.https === true) {
+if (serverSettings.http) {
+    if (serverSettings.http.secure === true) {
         log('starting as HTTPS server')
 
         let options = {}
@@ -48,15 +54,15 @@ if (settings.server) {
         // Defaults
         let certType = 'pem'
 
-        if (settings.server.certType) {
-            certType = settings.server.certType
+        if (serverSettings.http.certType) {
+            certType = serverSettings.http.certType
         }
 
         switch(certType) {
             case 'pem': {
                 let certPath = `${__dirname}/cert.pem`
-                if (settings.server.certPath) {
-                    certPath = settings.server.certPath
+                if (serverSettings.http.certPath) {
+                    certPath = serverSettings.http.certPath
                 }
                 
                 if (!fs.existsSync(certPath)) {
@@ -65,8 +71,8 @@ if (settings.server) {
                 }
 
                 let keyPath = `${__dirname}/cert.pem`
-                if (settings.server.keyPath) {
-                    keyPath = settings.server.keyPath
+                if (serverSettings.http.keyPath) {
+                    keyPath = serverSettings.http.keyPath
                 }
 
                 if (!fs.existsSync(keyPath)) {
@@ -126,14 +132,15 @@ app.use(auth.mw_verify)
 // Establish connection to MongoDB:
 var database = null
 const mongoClient = require('mongodb').MongoClient
-mongoClient.connect(settings.database.connectionString, { useUnifiedTopology: true }).then(async client => {
+mongoClient.connect(serverSettings.database.connectionString, { useUnifiedTopology: true }).then(async client => {
     log('MongoDB server connected.')
-    database = client.db(settings.database.dbname)
+    log(`Using DB '${serverSettings.database.dbname}'.`)
+    database = client.db(serverSettings.database.dbname)
 
     log('Setting up components...')
     let promises = []
     components.forEach(c => {
-        promises.push(c.module.setup(c.route, app, settings, database, log))
+        promises.push(c.module.setup(c.route, app, serverSettings, database, log, serverInfo))
     })
     await Promise.all(promises)
     log ('Setup Finished.')
@@ -141,6 +148,14 @@ mongoClient.connect(settings.database.connectionString, { useUnifiedTopology: tr
     server.listen(port, () => {
         log(`Listening on port ${port}.`)
     })
+
+
+    log(JSON.stringify(serverRecord))
+
+    if (serverInfo.firstRun) {
+        // TODO: Register server instance (serverRecord) in the DB.
+    }
+
 }).catch(err => {
     log('Failed to connect to database server.')
     log(err)
