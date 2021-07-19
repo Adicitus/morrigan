@@ -1,6 +1,7 @@
 "use strict"
 const morgan = require('morgan')
 const fs = require('fs')
+const { DateTime } = require('luxon')
 
 process.title = "morrigan.server"
 
@@ -23,10 +24,7 @@ log('Finished setting up logging.')
 log(`Reading server state (looking in '${serverSettings.stateDir}')...`)
 const serverInfo = require('./server.info').build(serverSettings.stateDir)
 log('Finished reading server state.')
-const serverRecord = {
-    info: serverInfo,
-    settings: serverSettings
-}
+serverInfo.settings = serverSettings
 
 const express = require('express')
 const expressws = require('express-ws')
@@ -154,12 +152,52 @@ mongoClient.connect(serverSettings.database.connectionString, { useUnifiedTopolo
         log(`Listening on port ${port}.`)
     })
 
+    log('Setting up instance reporting...')
 
-    log(JSON.stringify(serverRecord))
+    const instances = database.collection('instances')
 
-    if (serverInfo.firstRun) {
-        // TODO: Register server instance (serverRecord) in the DB.
+    const selector = {id: serverInfo.id}
+    let remoteRecord = await instances.findOne(selector)
+
+    const serverRecord = {
+        id: serverInfo.id,
+        settings: serverSettings,
+        state: serverInfo,
+        live: true,
+        checkInTime: DateTime.now().toISO()
     }
+
+    if (remoteRecord == null) {
+        log('Registering instance...')
+        await instances.insertOne(serverRecord)
+    } else {
+        log('Updating instance record...')
+        await instances.replaceOne(selector, serverRecord)
+    }
+
+    const updateInterval = setInterval(async () => {
+        log('Performing periodic update of instance record...')
+        serverRecord.checkInTime = DateTime.now().toISO()
+        instances.replaceOne(selector, serverRecord)
+    }, 30000)
+
+    const handleSignal = async (e) => {
+        log(`Shutdown signal received: ${e}`)
+        log('Updating instance record...')
+        clearInterval(updateInterval)
+        serverRecord.checkInTime = DateTime.now().toISO()
+        serverRecord.live = false
+        serverRecord.stopReason = e
+        await instances.replaceOne(selector, serverRecord)
+        log('Bye!')
+        process.exit()
+    }
+
+    process.on('SIGTERM', handleSignal)
+    process.on('SIGINT',  handleSignal)
+    process.on('SIGHUP',  handleSignal)
+
+    log('Finished instance reporting setup.')
 
 }).catch(err => {
     log('Failed to connect to database server.')
