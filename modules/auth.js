@@ -189,6 +189,10 @@ async function validateIdentitySpec(details, options) {
         options = {}
     }
 
+    if (details === null || details === undefined) {
+        return {state: 'requestError', reason: 'No user details provided.'}
+    }
+
     /* ===== Start: Validate name ===== */
     if (options.newIdentity && !details.name) {
         return {state: 'requestError', reason: 'No user name specified.'}
@@ -465,6 +469,10 @@ async function authenticate(details) {
 
     if (!r.pass) {
         return r
+    }
+
+    if (!r.cleanRecord.name) {
+        return { state: 'requestError', reason: 'No username specified.' }
     }
 
     let identity = await identityRecords.findOne({ name: details.name })
