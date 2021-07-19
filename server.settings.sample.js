@@ -1,4 +1,11 @@
 module.exports = {
+
+    /*
+        Directory where the state information for this server should be stored.
+        Defaults to `${__dirname}/state`.
+    */
+    stateDir: "/morrigan.server/state",
+
     http: {
         port: 443,
         secure: true,

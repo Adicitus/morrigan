@@ -5,11 +5,6 @@ const fs = require('fs')
 process.title = "morrigan.server"
 
 const serverSettings = require('./server.settings')
-const serverInfo = require('./server.info')
-const serverRecord = {
-    info: serverInfo,
-    settings: serverSettings
-}
 
 var port = 1337
 if (serverSettings.http.port) {
@@ -22,6 +17,16 @@ if (serverSettings.logger) {
     logger.setup(serverSettings.logger)
 }
 const log = logger.log
+
+log('Finished setting up logging.')
+
+log(`Reading server state (looking in '${serverSettings.stateDir}')...`)
+const serverInfo = require('./server.info').build(serverSettings.stateDir)
+log('Finished reading server state.')
+const serverRecord = {
+    info: serverInfo,
+    settings: serverSettings
+}
 
 const express = require('express')
 const expressws = require('express-ws')
@@ -47,7 +52,7 @@ var app = express()
 var server = null
 if (serverSettings.http) {
     if (serverSettings.http.secure === true) {
-        log('starting as HTTPS server')
+        log('Creating as HTTPS server...')
 
         let options = {}
 
@@ -102,7 +107,7 @@ if (serverSettings.http) {
 }
 
 if (!server) {
-    log('Starting as HTTP server')
+    log('Creating as HTTP server...')
     server = require('http').createServer(app)
 }
 
