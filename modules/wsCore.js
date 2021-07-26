@@ -309,7 +309,7 @@ module.exports.setup = (path, app, settings, database, logFunction) => {
             endpoints: [
                 {route: '/', method: 'get', handler: ep_getConnections},
                 {route: '/:connectionId', method: 'get', handler: ep_getConnections},
-                {route: '/send/:connectionId', method: 'post', handler: ep_send}
+                {route: '/:connectionId/send', method: 'post', handler: ep_send}
             ],
             functions: [
                 'api',
