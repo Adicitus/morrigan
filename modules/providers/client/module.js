@@ -192,7 +192,7 @@ function ep_provisionClient(req, res) {
     let t = provisionClient(details.id)
 
     res.status(200)
-    res.send(JSON.stringify({token: t.token}))
+    res.send(JSON.stringify(t))
 }
 
 function ep_getClients(req, res) {
