@@ -34,6 +34,11 @@ function verifyReqAuthentication(req) {
 
 var send = (connectionId, message) => {
     let r = connections.find((o) => o.id === connectionId)
+
+    if (!r) {
+        return { status: 'failed', reason: 'No such connection.' }
+    }
+
     if (!r.isAlive || !r.open ) {
         return { status: 'failed', reason: 'Connection closed or client not live.' }
     }
