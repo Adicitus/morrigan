@@ -520,7 +520,7 @@ module.exports.setup = async (path, app, serverEnv) => {
 
     log = serverEnv.log
 
-    let providerPaths = [`${__dirname}/authProviders`]
+    let providerPaths = [`${__dirname}/providers/auth`]
     if (settings.auth && settings.auth.providerPaths) {
         let a = settings.auth.providerPaths
         if (Array.isArray(a)) {
