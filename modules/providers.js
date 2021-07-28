@@ -83,7 +83,7 @@ module.exports.setup = (app, uriRoot, providersDir, environment, providers) => {
                     continue
                 }
 
-                if (!endpoint.method || typeof(endpoint.method) !== 'string' || !['connect', 'delete', 'get', 'head', 'options', 'patch', 'post', 'put', 'trace'].includes(endpoint.method)) {
+                if (!endpoint.method || typeof(endpoint.method) !== 'string' || !['connect', 'delete', 'get', 'head', 'options', 'patch', 'post', 'put', 'trace', 'ws'].includes(endpoint.method)) {
                     log(`Invalid endpoint method specified: ${endpoint.method}`)
                     continue
                 }
