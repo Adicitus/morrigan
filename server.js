@@ -40,7 +40,7 @@ const bodyParser = require('body-parser')
 const auth = require('./modules/auth')
 const components = [
     {module: auth, route: '/auth'},
-    {module: require('./modules/wsCore'), route: '/api'}
+    {module: require('./modules/core'), route: '/api'}
 ]
 
 // App is defined here since it wil be needed when creating the server.
