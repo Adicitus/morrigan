@@ -6,11 +6,9 @@ const {v4: uuidv4} = require('uuid')
 var connections = []
 var sockets = {}
 
+var coreEnv = null
 var providers = null
-
-function log(msg) {
-    console.log(`${DateTime.now()} | ${msg}`)
-}
+var log = null
 
 function verifyReqAuthentication(req) {
 
@@ -55,11 +53,6 @@ var send = (connectionId, message) => {
     s.send(msg)
 
     return {status: 'success'}
-}
-
-const coreEnv = {
-    'providers': providers,
-    'log': log
 }
 
 function ep_wsConnect (ws, request) {
@@ -282,13 +275,21 @@ function ep_send(req, res) {
  * @param {object} serverEnv - Server environment, expected to contain:
  *  + settings: The server settings object.
  *  + log: The log function to use.
+ *  + db: The database used by the server.
+ *  + info: Server info.
  */
 module.exports.setup = (path, app, serverEnv) => {
 
     let settings = serverEnv.settings
 
-    coreEnv.settings = settings
-    coreEnv.log = log = serverEnv.log
+    log = serverEnv.log
+
+    coreEnv = {
+        settings: settings,
+        db: serverEnv.db,
+        log: log,
+        serverInfo: serverEnv.info
+    }
 
     app.use(path, (req, res, next) => {
         
