@@ -507,17 +507,18 @@ module.exports.verifyToken = verifyToken
 /**
  * Used to set up authentication endpoints.
  * 
- * Endpoints:
- *  - ${path}: Used to authenticate
- *  - ${path}/clientToken
- * @param {string} path - Base path to set up the authentication endpoints under.
- * @param {object} app - Express application to set up the authentication endpoints on.
- * @param {object} settings - Configuration settings.
- * @param {object} databse  - MongoDB database.
+ * @param {string} path - Base path to set up the endpoints under.
+ * @param {object} app - The express app to install endpoints on.
+ * @param {object} serverEnv - Server environment, expected to contain:
+ *  + db: The database used by the server.
+ *  + settings: The server settings object.
+ *  + log: The log function to use.
  */
-module.exports.setup = async (path, app, settings, database, logFunction) => {
+module.exports.setup = async (path, app, serverEnv) => {
     
-    log = logFunction
+    let settings = serverEnv.settings
+
+    log = serverEnv.log
 
     let providerPaths = [`${__dirname}/authProviders`]
     if (settings.auth && settings.auth.providerPaths) {
@@ -531,8 +532,8 @@ module.exports.setup = async (path, app, settings, database, logFunction) => {
 
     authTypes = require('./providers').setup(app, path, providerPaths, { 'log': log })
 
-    identityRecords = database.collection('identities')
-    authenticationRecords = database.collection('authentication')
+    identityRecords = serverEnv.db.collection('identities')
+    authenticationRecords = serverEnv.db.collection('authentication')
 
     let identities = await identityRecords.find().toArray()
     let authentications = await await authenticationRecords.find().toArray()

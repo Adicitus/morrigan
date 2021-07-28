@@ -274,12 +274,21 @@ function ep_send(req, res) {
     res.send(JSON.stringify(r))
 }
 
-module.exports.setup = (path, app, settings, database, logFunction) => {
+/**
+ * Used to set up core functionality.
+ * 
+ * @param {string} path - Base path to set up the endpoints under.
+ * @param {object} app - The express app to set up endpoints on.
+ * @param {object} serverEnv - Server environment, expected to contain:
+ *  + settings: The server settings object.
+ *  + log: The log function to use.
+ */
+module.exports.setup = (path, app, serverEnv) => {
+
+    let settings = serverEnv.settings
 
     coreEnv.settings = settings
-
-    log = logFunction
-    coreEnv.log = logFunction
+    coreEnv.log = log = serverEnv.log
 
     app.use(path, (req, res, next) => {
         

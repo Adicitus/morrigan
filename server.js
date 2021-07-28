@@ -139,10 +139,18 @@ mongoClient.connect(serverSettings.database.connectionString, { useUnifiedTopolo
     log(`Using DB '${serverSettings.database.dbname}'.`)
     database = client.db(serverSettings.database.dbname)
 
+
+    const environment = {
+        db: database,
+        info: serverInfo,
+        log: log,
+        settings: serverSettings
+    }
+
     log('Setting up components...')
     let promises = []
     components.forEach(c => {
-        promises.push(c.module.setup(c.route, app, serverSettings, database, log, serverInfo))
+        promises.push(c.module.setup(c.route, app, environment))
     })
     await Promise.all(promises)
     log ('Setup Finished.')
