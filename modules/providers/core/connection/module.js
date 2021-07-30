@@ -46,8 +46,6 @@ function ep_wsConnect (ws, request) {
         open: true
     }
 
-    connections.push(record)
-
     var cleanup = () => {
         if (ws.readyState == 1) {
             ws.close()
@@ -63,7 +61,7 @@ function ep_wsConnect (ws, request) {
         connections.splice(i, 1)
     }
 
-    log(`Connection ${record.id} established from ${request.connection.remoteAddress} via ${request.headers.origin}`)
+    log(`Connection ${record.id} established from ${request.connection.remoteAddress}`)
 
     let r = coreEnv.providers.client.verifyToken(request.headers.origin)
 
@@ -76,7 +74,7 @@ function ep_wsConnect (ws, request) {
 
     let client = r.client
 
-    log(`Connection ${record.id} authenticated as ${client.id}.`)
+    log(`Connection ${record.id} authenticated as '${client.id}'.`)
 
 
     if (client.connectionId) {

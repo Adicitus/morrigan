@@ -60,7 +60,7 @@ module.exports.setup = (settings) => {
         logger.log('info', `Writing log files to '${fs.realpathSync(settings.logDir)}'.`)
 
         let transport = new winston.transports.DailyRotateFile({
-            filename: 'reportServer-%DATE%.log',
+            filename: 'morrigan-%DATE%.log',
             datePattern: 'YYYY-MM-DD-HH',
             dirname: settings.logDir,
             zippedArchive: true,
