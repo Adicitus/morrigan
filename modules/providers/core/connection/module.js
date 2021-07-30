@@ -58,7 +58,9 @@ function ep_wsConnect (ws, request) {
         }
 
         let i = connections.findIndex((o) => o.id === record.id)
-        connections.splice(i, 1)
+        if (i !== -1) {
+            connections.splice(i, 1)
+        }
     }
 
     log(`Connection ${record.id} established from ${request.connection.remoteAddress}`)
@@ -81,12 +83,14 @@ function ep_wsConnect (ws, request) {
         let i = connections.findIndex((o) => o.id === client.connectionId)
         if (i !== -1) {
             let c = connections[i]
+            // If the client has an active connection abort this connection attempt:
             if (c.isAlive) {
                 log(`Client '${client.id}' is already active in connection ${c.id}. Closing this connection.`)
                 cleanup()
                 return
             }
 
+            // If the old connection is inactive, remove it.
             connections.splice(i, 1)
         }
     }
@@ -94,7 +98,10 @@ function ep_wsConnect (ws, request) {
     record.authenticated = true
     record.clientId = client.id
     client.connectionId = record.id
+    record.serverId = coreEnv.serverInfo.id
     sockets[record.id]  = ws
+
+    connections.push(record)
 
     ws.on('pong', () => {
         record.lastHearbeat = DateTime.now()
