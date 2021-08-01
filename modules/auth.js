@@ -99,12 +99,12 @@ const secret = uuidv4()
  *      should perform any tasks needed to enable verification using
  *      the  "authenticate" function.
  */
-// TODO: Write a function to dynamically import authentication providers
 var authTypes = null
 
 // Temporary list of users, this should be moved into a DB.
 var identityRecords = null
 var authenticationRecords = null
+var tokenRecords = null
 
 /**
  * Used to generate a token for the provided identity.
@@ -115,8 +115,11 @@ var authenticationRecords = null
  * @param {object} identity - Details of the identity to create a token for.
  * @param {object} options  - Options to modify the way that the token is generated
  */
-function newToken(identity, options) {
+async function newToken(identity, options) {
     var now = DateTime.now()
+    var validTo = now.plus({minutes: 30})
+    var secret = uuidv4()
+
     var payload = {
         id: identity.id,
         name: identity.name,
@@ -124,9 +127,16 @@ function newToken(identity, options) {
         exp: Math.round(now.plus({minutes: 30}).toSeconds())
     }
 
+    var tokenRecord = {
+        id: uuidv4(),
+        identityId: identity.id,
+        secret: secret,
+        expires: validTo
+    }
+
     if (options) {
         if (options.duration) {
-            payload.exp = Math.round(now.plus(options.duration).toSeconds())
+            payload.exp = Math.round(validTo.toSeconds())
         }
     }
 
@@ -136,7 +146,18 @@ function newToken(identity, options) {
 
     var t = jwt.sign(payload, secret)
 
-    return t
+    var currentTokenRecord = await tokenRecords.findOne({identityId: identity.id})
+
+    if (currentTokenRecord) {
+        tokenRecords.replaceOne({id: currentTokenRecord.id}, tokenRecord)
+    } else {
+        tokenRecords.insertOne(tokenRecord)
+    }
+
+    let encId = Buffer.from(identity.id).toString('base64')
+    let signedToken = encId + "." + t
+
+    return signedToken
 }
 
 /**
@@ -144,10 +165,30 @@ function newToken(identity, options) {
  * 
  * @param {string} token - Token to validate.
  */
-function verifyToken(token) {
+async function verifyToken(signedToken) {
+
+    const signedTokenRegex = /(?<identityId>[^.]+)\.(?<token>[^.]+\.[^.]+\.[^.]+)/
+    
+    let m = signedToken.match(signedTokenRegex)
+
+    if (!m) {
+        return null
+    }
+
+    let identityId = Buffer.from(m.groups.identityId, 'base64').toString()
+
+    let tokenRecord = await tokenRecords.findOne({identityId: identityId})
+
+
+    if (!tokenRecord) {
+        return null
+    }
+
+    let token = m.groups.token
+
     try {
-        jwt.verify(token, secret)
-        return jwt.decode(token, secret)
+        jwt.verify(token, tokenRecord.secret)
+        return jwt.decode(token, tokenRecord.secret)
     } catch {
         return null
     }
@@ -490,7 +531,7 @@ async function authenticate(details) {
         return r
     }
 
-    var t = newToken(identity)
+    var t = await newToken(identity)
     r.token = t
 
     return r
@@ -534,6 +575,7 @@ module.exports.setup = async (path, app, serverEnv) => {
 
     identityRecords = serverEnv.db.collection('identities')
     authenticationRecords = serverEnv.db.collection('authentication')
+    tokenRecords = serverEnv.db.collection('tokens')
 
     let identities = await identityRecords.find().toArray()
     let authentications = await await authenticationRecords.find().toArray()
@@ -807,7 +849,7 @@ module.exports.mw_verify = async (req, res, next) => {
         var m = auth.match(/^(?<type>bearer) (?<token>.+)/)
         
         if (m) {
-            var p = verifyToken(m.groups.token)
+            var p = await verifyToken(m.groups.token)
             
             if (p) {
                 req.authenticated = p
