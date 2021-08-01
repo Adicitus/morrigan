@@ -265,7 +265,7 @@ module.exports.functions = [
     'connection.send'
 ]
 
-module.exports.setup = (env)  => {
+module.exports.setup = async (env)  => {
     coreEnv = env
     log = env.log
 }

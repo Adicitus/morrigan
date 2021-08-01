@@ -75,7 +75,7 @@ module.exports.setup = async (path, app, serverEnv) => {
         }
     }
 
-    coreEnv.providers = require('./providers').setup(app, path, providerPaths, coreEnv)
+    coreEnv.providers = await require('./providers').setup(app, path, providerPaths, coreEnv)
 
 }
 

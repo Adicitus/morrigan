@@ -19,7 +19,7 @@ const fs = require('fs')
  * @param environment Core environment
  * @param providers Prepopulated providers. Can be safely omitted.
  */
-module.exports.setup = (app, uriRoot, providersDir, environment, providers) => {
+module.exports.setup = async (app, uriRoot, providersDir, environment, providers) => {
 
     const log = environment.log
 
@@ -64,9 +64,11 @@ module.exports.setup = (app, uriRoot, providersDir, environment, providers) => {
 
     for (const p in providers) {
         let provider = providers[p]
+        let promises = []
         if (provider.setup) {
-            provider.setup(environment)
+            promises.push(provider.setup(environment))
         }
+        await Promise.all(promises)
     }
 
     for (var namespace in providers) {

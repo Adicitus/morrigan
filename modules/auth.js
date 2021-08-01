@@ -530,7 +530,7 @@ module.exports.setup = async (path, app, serverEnv) => {
         }
     }
 
-    authTypes = require('./providers').setup(app, path, providerPaths, { 'log': log })
+    authTypes = await require('./providers').setup(app, path, providerPaths, { 'log': log })
 
     identityRecords = serverEnv.db.collection('identities')
     authenticationRecords = serverEnv.db.collection('authentication')

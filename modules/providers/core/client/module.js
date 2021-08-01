@@ -249,6 +249,6 @@ module.exports.messages = {
     }
 }
 
-module.exports.setup = (coreEnv) => {
+module.exports.setup = async (coreEnv) => {
     log = coreEnv.log
 }
