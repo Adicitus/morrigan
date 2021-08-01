@@ -4,27 +4,22 @@ const { DateTime } = require('luxon')
 const jwt  = require('jsonwebtoken')
 const {v4: uuidv4} = require('uuid')
 
-var clients = []
-var tokens = []
+var clientRecords = null
+var tokenRecords = null
+
 var log = null
 
 
-function getClient(clientId) {
-    return clients.find((o) => o.id === clientId)
+async function getClient(clientId) {
+    return await clientRecords.findOne({ id: clientId })
 }
 
-function getClients() {
-    return clients
+async function getClients() {
+    return await clientRecords.find().toArray()
 }
 
-function removeClient(clientId) {
-    let i = client.findIndex((o) => o.id === clientId)
-
-    if (i === -1)  {
-        return
-    }
-
-    clients.splice(i, 1)
+async function removeClient(clientId) {
+    await clientRecords.deleteOne({ id: clientId})
 }
 
 /**
@@ -39,9 +34,9 @@ function removeClient(clientId) {
  * 
  * @param {string} clientId - ID to setup client resources for.
  */
-function provisionClient(clientId){
+async function provisionClient(clientId){
 
-    let client = getClient(clientId)
+    let client = await getClient(clientId)
 
     let record = null
 
@@ -52,15 +47,15 @@ function provisionClient(clientId){
             id: clientId,
             created: DateTime.now()
         }
-        clients.push(record)
+        await clientRecords.insertOne(record)
     }
 
-    let t = provisionToken(clientId)
+    let t = await provisionToken(clientId)
 
     record.tokenId = t.id
-    record.tokenExpires = t.expires
-    
     record.updated = DateTime.now()
+
+    clientRecords.replaceOne({id: record.id}, record)
 
     return t
 
@@ -75,7 +70,7 @@ function provisionClient(clientId){
  * 
  * @param {string} clientId - ID of the client to provision a token for.
  */
-function provisionToken(clientId) {
+async function provisionToken(clientId) {
 
     let now = DateTime.now()
     let newTokenId = uuidv4()
@@ -99,13 +94,12 @@ function provisionToken(clientId) {
     let encId = Buffer.from(clientId).toString('base64')
     let signedToken = encId + "." + token
 
-    
-    let i = tokens.findIndex((o) => o.clientId == clientId)
+    let t = await tokenRecords.findOne({clientId: clientId})
 
-    if (i === -1) {
-        tokens.push(record)
+    if (t) {
+        tokenRecords.replaceOne({clientId: clientId}, record)
     } else {
-        tokens.splice(i, 1, record)
+        tokenRecords.insertOne(record)
     }
 
     log(`New token issued for client '${clientId}'.`)
@@ -126,7 +120,7 @@ function provisionToken(clientId) {
  * 
  * @param {string} signedToken - The token to verify.
  */
-function verifyToken(signedToken) {
+async function verifyToken(signedToken) {
 
     if ((typeof signedToken) !== 'string') {
         return { state: 'authenticationfailed', reason: 'Invalid token type.'}
@@ -142,13 +136,11 @@ function verifyToken(signedToken) {
 
     let clientId = Buffer.from(m.groups.clientId, 'base64').toString()
 
-    let i = tokens.findIndex((o) => o.clientId === clientId)
+    let token = await tokenRecords.findOne({ clientId: clientId })
 
-    if (i === -1) {
+    if (!token) {
         return { state: 'authenticationFailed', reason: 'No such client.' }
     }
-
-    let token = tokens[i]
 
     let t = m.groups.token
 
@@ -170,7 +162,7 @@ function verifyToken(signedToken) {
         return { state: 'authenticationFailed', reason: 'Token ID mismatch.' }
     }
 
-    let client = getClient(token.clientId)
+    let client = await getClient(token.clientId)
 
     return { state: 'success', client: client }
 }
@@ -183,26 +175,26 @@ module.exports.removeClient     = removeClient
 
 /* =========== Start Endpoint Definition ============== */
 
-function ep_provisionClient(req, res) {
+async function ep_provisionClient(req, res) {
 
     let details = req.body
     
     log(`Provisioning client '${details.id}' for ${req.authenticated.name}`)
 
-    let t = provisionClient(details.id)
+    let t = await provisionClient(details.id)
 
     res.status(200)
     res.send(JSON.stringify(t))
 }
 
-function ep_getClients(req, res) {
+async function ep_getClients(req, res) {
 
     if (req.params) {
 
         let params = req.params
 
         if (params.clientId) {
-            let c = getClient(params.clientId)
+            let c = await getClient(params.clientId)
             if (c) {
                 res.status(200)
                 res.send(JSON.stringify(c))
@@ -217,7 +209,7 @@ function ep_getClients(req, res) {
     }
 
     res.status(200)
-    res.send(JSON.stringify(getClients()))
+    res.send(JSON.stringify(await getClients()))
 }
 
 module.exports.endpoints = [
@@ -231,9 +223,9 @@ module.exports.messages = {
      * The client is asking for a refreshed token, respond wiht client.token.issue
      * containing a newly provisioned token.
      */
-    'token.refresh': (message, connection, record, core) => {
+    'token.refresh': async (message, connection, record, core) => {
         core.log(`Client ${record.clientId} requested a new token.`)
-        let r = provisionToken(record.clientId)
+        let r = await provisionToken(record.clientId)
         connection.send(JSON.stringify({
             type: 'client.token.issue',
             token: r.token,
@@ -241,14 +233,17 @@ module.exports.messages = {
         }))
     },
 
-    'state': (message, connection, record, core) => {
+    'state': async (message, connection, record, core) => {
         let providers = core.providers
         core.log(`Client ${record.clientId} reported state: ${message.state}`)
-        let client = providers.client.getClient(record.clientId)
+        let client = await providers.client.getClient(record.clientId)
         client.state = message.state
     }
 }
 
 module.exports.setup = async (coreEnv) => {
     log = coreEnv.log
+
+    clientRecords = coreEnv.db.collection('clients')
+    tokenRecords = coreEnv.db.collection('clientTokens')
 }
