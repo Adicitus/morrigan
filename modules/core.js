@@ -80,15 +80,13 @@ module.exports.setup = async (path, app, serverEnv) => {
 }
 
 module.exports.onShutdown = async (reason) => {
-    for (var n in coreEnv.providers) {
-        let provider = coreEnv.providers[n]
+    let promises = []
+    for (var i in coreEnv.providers) {
+        let p = coreEnv.providers[i]
 
-        let promises = []
-
-        if (provider.onShutdown) {
-            promises.push(provider.onShutdown(coreEnv, reason))
+        if (p.onShutdown) {
+            promises.push(p.onShutdown(reason))
         }
     }
-
     await Promise.all(promises)
 }
