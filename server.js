@@ -191,6 +191,18 @@ mongoClient.connect(serverSettings.database.connectionString, { useUnifiedTopolo
         log(`Shutdown signal received: ${e}`)
         log('Updating instance record...')
         clearInterval(updateInterval)
+
+        log('Calling onShutdown methods on componets...')
+        let shutdownPromises = []
+        for (const i in components) {
+            let comp = components[i]
+            if (comp.onShutdown) {
+                let p = comp.onShutdown(e)
+                shutdownPromises.push(p)
+            }
+        }
+        await Promise.all(shutdownPromises)
+
         serverRecord.checkInTime = DateTime.now().toISO()
         serverRecord.live = false
         serverRecord.stopReason = e

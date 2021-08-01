@@ -34,7 +34,7 @@ function verifyReqAuthentication(req) {
  *  + db: The database used by the server.
  *  + info: Server info.
  */
-module.exports.setup = (path, app, serverEnv) => {
+module.exports.setup = async (path, app, serverEnv) => {
 
     let settings = serverEnv.settings
 
@@ -77,4 +77,18 @@ module.exports.setup = (path, app, serverEnv) => {
 
     coreEnv.providers = require('./providers').setup(app, path, providerPaths, coreEnv)
 
+}
+
+module.exports.onShutdown = async (reason) => {
+    for (var n in coreEnv.providers) {
+        let provider = coreEnv.providers[n]
+
+        let promises = []
+
+        if (provider.onShutdown) {
+            promises.push(provider.onShutdown(coreEnv, reason))
+        }
+    }
+
+    await Promise.all(promises)
 }
