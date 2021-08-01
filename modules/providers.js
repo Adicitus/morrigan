@@ -11,13 +11,13 @@ const fs = require('fs')
  * Endpoints should be exported as an array of objects with the following fields:
  *  - route: A path to be appended to the "uriRoot" (uriRoot + providerName + route).
  *  - method: A HTTP method.
- *  - handler: A function to be  registered as handler fo the endpoint.
+ *  - handler: A function to be registered as handler fo the endpoint.
  * 
  * @param app Express app to register endpoints on.
  * @param uriRoot The root path that provider endpoints should be registered under.
  * @param providersDir The path to the directory containing provider definitions. This parameter can accept and array of paths to load from multiple locations.
  * @param environment Core environment
- * @param providers Prepopulated providers. Can be safely omitted.
+ * @param providers Prepopulated providers list, this object will be returned by the function. This parameter can be safely omitted, in which case a new object will be created.
  */
 module.exports.setup = async (app, uriRoot, providersDir, environment, providers) => {
 
