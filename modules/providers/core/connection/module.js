@@ -8,6 +8,7 @@ var log = null
 
 var connectionRecords = null
 var sockets = {}
+var heartbeats = {}
 
 var send = async (connectionId, message) => {
     let r = await connectionRecords.findOne({id: connectionId})
@@ -38,6 +39,27 @@ var send = async (connectionId, message) => {
     return {status: 'success'}
 }
 
+async function cleanup (connectionId) {
+
+    let ws = sockets[connectionId]
+    let record = await connectionRecords.findOne({id: connectionId})
+
+    if (ws.readyState == 1) {
+        ws.close()
+    }
+    
+    record.isAlive = false
+    record.open = false
+
+    let heartBeatCheck = heartbeats[connectionId]
+
+    if (heartBeatCheck) {
+        clearInterval(heartBeatCheck)
+    }
+
+    connectionRecords.replaceOne({id: connectionId}, record)
+}
+
 async function ep_wsConnect (ws, request) {
     
     var heartBeatCheck = null
@@ -50,23 +72,6 @@ async function ep_wsConnect (ws, request) {
         open: true
     }
 
-    var cleanup = async () => {
-        if (ws.readyState == 1) {
-            ws.close()
-        }
-        
-        record.isAlive = false
-        record.open = false
-        if (heartBeatCheck) {
-            clearInterval(heartBeatCheck)
-        }
-
-        let c = await connectionRecords.findOne({id: record.id})
-        if (c) {
-            connectionRecords.deleteOne({id: record.id})
-        }
-    }
-
     log(`Connection ${record.id} established from ${request.connection.remoteAddress}`)
 
     let r = await coreEnv.providers.client.verifyToken(request.headers.origin)
@@ -74,7 +79,7 @@ async function ep_wsConnect (ws, request) {
     if (r.state !== 'success') {
         log(`${record.id} failed authentication attempt. state: '${r.state}', reason: ${r.reason}`)
         log(`Client sent invalid token, closing connection`)
-        cleanup()
+        cleanup(record.id)
         return
     }
 
@@ -82,25 +87,35 @@ async function ep_wsConnect (ws, request) {
 
     log(`Connection ${record.id} authenticated as '${client.id}'.`)
 
+    let c = await connectionRecords.findOne({clientId: client.id})
 
-    if (client.connectionId) {
-        let c = await connectionRecords.findOne({clientId: client.id})
-        if (c) {
-            // If the client has an active connection abort this connection attempt:
-            if (c.isAlive) {
-                log(`Client '${client.id}' is already active in connection ${c.id}. Closing this connection.`)
-                cleanup()
-                return
-            }
-
-            // If the old connection is inactive, remove it.
-            connectionRecords.deleteOne({id: c.id})
+    if (c) {
+        // If the client has an active connection abort this connection attempt:
+        if (c.isAlive) {
+            log(`Client '${client.id}' is already active in connection ${c.id}. Closing this connection.`)
+            cleanup(record.id)
+            return
         }
+
+        // If the old connection is inactive, remove it.
+        connectionRecords.deleteOne({id: c.id})
     }
+
+    // Heartbeat monitor
+    heartBeatCheck = setInterval(() => {
+            if (!record.isAlive) {
+                log(`Heartbeat missed by ${request.connection.remoteAddress}`)
+            }
+            record.isAlive = false
+            ws.ping()
+        },
+        30000
+    )
+
+    heartbeats[record.id] = heartBeatCheck
 
     record.authenticated = true
     record.clientId = client.id
-    client.connectionId = record.id
     record.serverId = coreEnv.serverInfo.id
     sockets[record.id]  = ws
 
@@ -160,7 +175,7 @@ async function ep_wsConnect (ws, request) {
                 client.state = 'unknown'
             }
         }
-        cleanup()
+        cleanup(record.id)
     })
 
     ws.send(
@@ -173,17 +188,6 @@ async function ep_wsConnect (ws, request) {
         JSON.stringify({
             type: 'capability.report' 
         })
-    )
-
-    // Heartbeat monitor
-    heartBeatCheck = setInterval(() => {
-            if (!record.isAlive) {
-                log(`Heartbeat missed by ${request.connection.remoteAddress}`)
-            }
-            record.isAlive = false
-            ws.ping()
-        },
-        30000
     )
 
     log(`Connection ${record.id} is ready.`)
@@ -275,6 +279,13 @@ module.exports.setup = async (env)  => {
     log = env.log
 
     connectionRecords = env.db.collection('connections')
+}
+
+module.exports.onShutdown = async () => {
+    for (const cid in sockets) {
+        sockets[cid].close()
+        connectionRecords.update({id: cid}, { isAlive: false })
+    }
 }
 
 module.exports.send = send
