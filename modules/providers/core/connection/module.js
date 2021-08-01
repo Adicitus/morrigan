@@ -42,22 +42,25 @@ var send = async (connectionId, message) => {
 async function cleanup (connectionId) {
 
     let ws = sockets[connectionId]
-    let record = await connectionRecords.findOne({id: connectionId})
 
-    if (ws.readyState == 1) {
+    if (ws && ws.readyState == 1) {
         ws.close()
     }
     
-    record.isAlive = false
-    record.open = false
+    let record = await connectionRecords.findOne({id: connectionId})
+    
+    if (record) {
+        record.isAlive = false
+        record.open = false
 
-    let heartBeatCheck = heartbeats[connectionId]
+        let heartBeatCheck = heartbeats[connectionId]
 
-    if (heartBeatCheck) {
-        clearInterval(heartBeatCheck)
+        if (heartBeatCheck) {
+            clearInterval(heartBeatCheck)
+        }
+
+        await connectionRecords.replaceOne({id: connectionId}, record)
     }
-
-    connectionRecords.replaceOne({id: connectionId}, record)
 }
 
 async function ep_wsConnect (ws, request) {
@@ -73,6 +76,7 @@ async function ep_wsConnect (ws, request) {
     }
 
     log(`Connection ${record.id} established from ${request.connection.remoteAddress}`)
+    sockets[record.id]  = ws
 
     let r = await coreEnv.providers.client.verifyToken(request.headers.origin)
 
@@ -93,13 +97,19 @@ async function ep_wsConnect (ws, request) {
         // If the client has an active connection abort this connection attempt:
         if (c.isAlive) {
             log(`Client '${client.id}' is already active in connection ${c.id}. Closing this connection.`)
-            cleanup(record.id)
+            await cleanup(record.id)
             return
         }
 
         // If the old connection is inactive, remove it.
         connectionRecords.deleteOne({id: c.id})
     }
+
+    record.authenticated = true
+    record.clientId = client.id
+    record.serverId = coreEnv.serverInfo.id
+
+    connectionRecords.insertOne(record)
 
     // Heartbeat monitor
     heartBeatCheck = setInterval(() => {
@@ -113,13 +123,6 @@ async function ep_wsConnect (ws, request) {
     )
 
     heartbeats[record.id] = heartBeatCheck
-
-    record.authenticated = true
-    record.clientId = client.id
-    record.serverId = coreEnv.serverInfo.id
-    sockets[record.id]  = ws
-
-    connectionRecords.insertOne(record)
 
     ws.on('pong', () => {
         record.lastHearbeat = DateTime.now()
@@ -282,9 +285,12 @@ module.exports.setup = async (env)  => {
 }
 
 module.exports.onShutdown = async () => {
+    log('Server is shutting down, ending all connections...')
     for (const cid in sockets) {
-        sockets[cid].close()
-        connectionRecords.update({id: cid}, { isAlive: false })
+
+        log (`Closing connection ${cid}...`)
+
+        cleanup(cid)
     }
 }
 
