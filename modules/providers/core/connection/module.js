@@ -6,11 +6,11 @@ const {v4: uuidv4} = require('uuid')
 var coreEnv = null
 var log = null
 
-var connections = []
+var connectionRecords = null
 var sockets = {}
 
-var send = (connectionId, message) => {
-    let r = connections.find((o) => o.id === connectionId)
+var send = async (connectionId, message) => {
+    let r = await connectionRecords.findOne({id: connectionId})
 
     if (!r) {
         return { status: 'failed', reason: 'No such connection.' }
@@ -18,6 +18,10 @@ var send = (connectionId, message) => {
 
     if (!r.isAlive || !r.open ) {
         return { status: 'failed', reason: 'Connection closed or client not live.' }
+    }
+
+    if (r.serverId !== coreEnv.serverInfo.id) {
+        return { status: 'failed', reason: `Connection '${connectionId}' does not belong to this server ('${coreEnv.serverInfo.id}').` }
     }
 
     let msg = null
@@ -34,7 +38,7 @@ var send = (connectionId, message) => {
     return {status: 'success'}
 }
 
-function ep_wsConnect (ws, request) {
+async function ep_wsConnect (ws, request) {
     
     var heartBeatCheck = null
 
@@ -46,7 +50,7 @@ function ep_wsConnect (ws, request) {
         open: true
     }
 
-    var cleanup = () => {
+    var cleanup = async () => {
         if (ws.readyState == 1) {
             ws.close()
         }
@@ -57,15 +61,15 @@ function ep_wsConnect (ws, request) {
             clearInterval(heartBeatCheck)
         }
 
-        let i = connections.findIndex((o) => o.id === record.id)
-        if (i !== -1) {
-            connections.splice(i, 1)
+        let c = await connectionRecords.findOne({id: record.id})
+        if (c) {
+            connectionRecords.deleteOne({id: record.id})
         }
     }
 
     log(`Connection ${record.id} established from ${request.connection.remoteAddress}`)
 
-    let r = coreEnv.providers.client.verifyToken(request.headers.origin)
+    let r = await coreEnv.providers.client.verifyToken(request.headers.origin)
 
     if (r.state !== 'success') {
         log(`${record.id} failed authentication attempt. state: '${r.state}', reason: ${r.reason}`)
@@ -80,9 +84,8 @@ function ep_wsConnect (ws, request) {
 
 
     if (client.connectionId) {
-        let i = connections.findIndex((o) => o.id === client.connectionId)
-        if (i !== -1) {
-            let c = connections[i]
+        let c = await connectionRecords.findOne({clientId: client.id})
+        if (c) {
             // If the client has an active connection abort this connection attempt:
             if (c.isAlive) {
                 log(`Client '${client.id}' is already active in connection ${c.id}. Closing this connection.`)
@@ -91,7 +94,7 @@ function ep_wsConnect (ws, request) {
             }
 
             // If the old connection is inactive, remove it.
-            connections.splice(i, 1)
+            connectionRecords.deleteOne({id: c.id})
         }
     }
 
@@ -101,7 +104,7 @@ function ep_wsConnect (ws, request) {
     record.serverId = coreEnv.serverInfo.id
     sockets[record.id]  = ws
 
-    connections.push(record)
+    connectionRecords.insertOne(record)
 
     ws.on('pong', () => {
         record.lastHearbeat = DateTime.now()
@@ -187,14 +190,14 @@ function ep_wsConnect (ws, request) {
 
 }
 
-function ep_getConnections(req, res) {
+async function ep_getConnections(req, res) {
 
     if (req.params) {
 
         let params = req.params
 
         if (params.connectionId) {
-            let c = connections.find((o) => o.id === params.connectionId)
+            let c = connectionRecords.findOne({id: params.connectionId})
             if (c) {
                 res.status(200)
                 res.send(JSON.stringify(c))
@@ -208,8 +211,10 @@ function ep_getConnections(req, res) {
         
     }
 
+    let cs = await connectionRecords.find().toArray()
+
     res.status(200)
-    res.send(JSON.stringify(connections))
+    res.send(JSON.stringify(cs))
 }
 
 function ep_send(req, res) {
@@ -268,6 +273,8 @@ module.exports.functions = [
 module.exports.setup = async (env)  => {
     coreEnv = env
     log = env.log
+
+    connectionRecords = env.db.collection('connections')
 }
 
 module.exports.send = send
