@@ -10,6 +10,11 @@ var connectionRecords = null
 var sockets = {}
 var heartbeats = {}
 
+/**
+ * Sends the given message object accross the given connection.
+ * @param {string} connectionId The ID of the connection through which to send the message.
+ * @param {object} message The message to send.
+ */
 var send = async (connectionId, message) => {
     let r = await connectionRecords.findOne({id: connectionId})
 
@@ -39,6 +44,11 @@ var send = async (connectionId, message) => {
     return {status: 'success'}
 }
 
+
+/**
+ * Closes the given connection and frees up any associated resources.
+ * @param {string} connectionId The ID of the connection to close.
+ */
 async function cleanup (connectionId) {
 
     let ws = sockets[connectionId]
