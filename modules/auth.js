@@ -107,94 +107,6 @@ var authenticationRecords = null
 var tokenRecords = null
 
 /**
- * Used to generate a token for the provided identity.
- * 
- * Options:
- *  - duration: A luxon duration to to define how long the token should be valid.
- * 
- * @param {object} identity - Details of the identity to create a token for.
- * @param {object} options  - Options to modify the way that the token is generated
- */
-async function newToken(identity, options) {
-    var now = DateTime.now()
-    var validTo = now.plus({minutes: 30})
-    var secret = uuidv4()
-
-    var payload = {
-        id: identity.id,
-        name: identity.name,
-        iat: Math.round(now.toSeconds()),
-        exp: Math.round(now.plus({minutes: 30}).toSeconds())
-    }
-
-    var tokenRecord = {
-        id: uuidv4(),
-        identityId: identity.id,
-        secret: secret,
-        expires: validTo
-    }
-
-    if (options) {
-        if (options.duration) {
-            payload.exp = Math.round(validTo.toSeconds())
-        }
-    }
-
-    if (identity.functions) {
-        payload.functions = identity.functions
-    }
-
-    var t = jwt.sign(payload, secret)
-
-    var currentTokenRecord = await tokenRecords.findOne({identityId: identity.id})
-
-    if (currentTokenRecord) {
-        tokenRecords.replaceOne({id: currentTokenRecord.id}, tokenRecord)
-    } else {
-        tokenRecords.insertOne(tokenRecord)
-    }
-
-    let encId = Buffer.from(identity.id).toString('base64')
-    let signedToken = encId + "." + t
-
-    return signedToken
-}
-
-/**
- * Attempts to validate the provided token. Returns the payload as an object if the token is valid.
- * 
- * @param {string} token - Token to validate.
- */
-async function verifyToken(signedToken) {
-
-    const signedTokenRegex = /(?<identityId>[^.]+)\.(?<token>[^.]+\.[^.]+\.[^.]+)/
-    
-    let m = signedToken.match(signedTokenRegex)
-
-    if (!m) {
-        return null
-    }
-
-    let identityId = Buffer.from(m.groups.identityId, 'base64').toString()
-
-    let tokenRecord = await tokenRecords.findOne({identityId: identityId})
-
-
-    if (!tokenRecord) {
-        return null
-    }
-
-    let token = m.groups.token
-
-    try {
-        jwt.verify(token, tokenRecord.secret)
-        return jwt.decode(token, tokenRecord.secret)
-    } catch {
-        return null
-    }
-}
-
-/**
  * Verifies a set of identity details versus the expected format and returns a sanitized record if successful.
  * 
  * By default the only compulsory detail is 'name', since this is currently
@@ -334,6 +246,139 @@ async function validateIdentitySpec(details, options) {
     }
 
     return {state: 'success', pass: true, cleanRecord: cleanRecord, authType: authType }
+}
+
+/**
+ * Attempts to validate a set of authentication details and returns an object
+ * a new token.
+ * 
+ * @param {object} details - Authentication details that should be validated.
+ */
+async function authenticate(details) {
+
+    let r = await validateIdentitySpec(details)
+
+    if (!r.pass) {
+        return r
+    }
+
+    if (!r.cleanRecord.name) {
+        return { state: 'requestError', reason: 'No username specified.' }
+    }
+
+    let identity = await identityRecords.findOne({ name: details.name })
+    let auth = await authenticationRecords.findOne( { id: identity.authId })
+
+    if (!auth) {
+        return { state: 'serverMissingAuthRecord', reason: 'Authentication record missing.'}
+    }
+
+    let authType = authTypes[auth.type]
+
+    r = authType.authenticate(auth, details)
+    
+    if (r.state !== 'success') {
+        return r
+    }
+
+    var t = await newToken(identity)
+    r.token = t
+
+    return r
+}
+
+/**
+ * Used to generate a token for the provided identity.
+ * 
+ * Options:
+ *  - duration: A luxon duration to to define how long the token should be valid.
+ * 
+ * @param {object} identity - Details of the identity to create a token for.
+ * @param {object} options  - Options to modify the way that the token is generated
+ */
+async function newToken(identity, options) {
+    var now = DateTime.now()
+    var validTo = now.plus({minutes: 30})
+    var secret = uuidv4()
+
+    var tokenRecord = {
+        id: uuidv4(),
+        identityId: identity.id,
+        secret: secret,
+        expires: validTo
+    }
+
+    var payload = {
+        identity: identity.id,
+        iat: Math.round(now.toSeconds()),
+        exp: Math.round(now.plus({minutes: 30}).toSeconds())
+    }
+
+    if (options) {
+        if (options.duration) {
+            payload.exp = Math.round(validTo.toSeconds())
+        }
+    }
+
+    if (identity.functions) {
+        payload.functions = identity.functions
+    }
+
+    var t = jwt.sign(payload, secret)
+
+    var currentTokenRecord = await tokenRecords.findOne({identityId: identity.id})
+
+    if (currentTokenRecord) {
+        tokenRecords.replaceOne({id: currentTokenRecord.id}, tokenRecord)
+    } else {
+        tokenRecords.insertOne(tokenRecord)
+    }
+
+    let b64Id = Buffer.from(tokenRecord.id).toString('base64')
+    let signedToken = b64Id + "." + t
+
+    return signedToken
+}
+
+/**
+ * Attempts to validate the provided token. Returns the payload as an object if the token is valid.
+ * 
+ * @param {string} token - Token to validate.
+ */
+async function verifyToken(signedToken) {
+
+    const signedTokenRegex = /(?<tokenId>[^.]+)\.(?<token>[^.]+\.[^.]+\.[^.]+)/
+    
+    let m = signedToken.match(signedTokenRegex)
+
+    if (!m) {
+        return null
+    }
+
+    let tokenId = Buffer.from(m.groups.tokenId, 'base64').toString()
+
+    let tokenRecord = await tokenRecords.findOne({id: tokenId})
+
+    if (!tokenRecord) {
+        return null
+    }
+
+    let token = m.groups.token
+
+    try {
+        jwt.verify(token, tokenRecord.secret)
+        let p = jwt.decode(token, tokenRecord.secret)
+
+        let i = identityRecords.findOne({id: p.identity})
+        if(!i) {
+            return null
+        }
+
+        return i
+
+    } catch {
+        return null
+    }
 }
 
 /**
@@ -496,45 +541,6 @@ async function removeIdentity(identityId){
     await identityRecords.removeOne({id: identity.id})
     
     return { state: 'success' }
-}
-
-/**
- * Attempts to validate a set of authentication details and returns an object
- * a new token.
- * 
- * @param {object} details - Authentication details that should be validated.
- */
-async function authenticate(details) {
-
-    let r = await validateIdentitySpec(details)
-
-    if (!r.pass) {
-        return r
-    }
-
-    if (!r.cleanRecord.name) {
-        return { state: 'requestError', reason: 'No username specified.' }
-    }
-
-    let identity = await identityRecords.findOne({ name: details.name })
-    let auth = await authenticationRecords.findOne( { id: identity.authId })
-
-    if (!auth) {
-        return { state: 'serverMissingAuthRecord', reason: 'Authentication record missing.'}
-    }
-
-    let authType = authTypes[auth.type]
-
-    r = authType.authenticate(auth, details)
-    
-    if (r.state !== 'success') {
-        return r
-    }
-
-    var t = await newToken(identity)
-    r.token = t
-
-    return r
 }
 
 /* ====== Export definitions: ===== */
@@ -849,10 +855,10 @@ module.exports.mw_verify = async (req, res, next) => {
         var m = auth.match(/^(?<type>bearer) (?<token>.+)/)
         
         if (m) {
-            var p = await verifyToken(m.groups.token)
+            var identity = await verifyToken(m.groups.token)
             
-            if (p) {
-                req.authenticated = p
+            if (identity) {
+                req.authenticated = identity
             }
         }
     }
