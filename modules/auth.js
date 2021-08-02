@@ -579,9 +579,9 @@ module.exports.setup = async (path, app, serverEnv) => {
 
     authTypes = await require('./providers').setup(app, path, providerPaths, { 'log': log })
 
-    identityRecords = serverEnv.db.collection('identities')
-    authenticationRecords = serverEnv.db.collection('authentication')
-    tokenRecords = serverEnv.db.collection('tokens')
+    identityRecords = serverEnv.db.collection('morrigan.identities')
+    tokenRecords = serverEnv.db.collection('morrigan.identities.tokens')
+    authenticationRecords = serverEnv.db.collection('morrigan.authentication')
 
     let identities = await identityRecords.find().toArray()
     let authentications = await await authenticationRecords.find().toArray()

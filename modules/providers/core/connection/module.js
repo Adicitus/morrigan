@@ -291,7 +291,7 @@ module.exports.setup = async (env)  => {
     coreEnv = env
     log = env.log
 
-    connectionRecords = env.db.collection('connections')
+    connectionRecords = env.db.collection('morrigan.connections')
 }
 
 module.exports.onShutdown = async () => {

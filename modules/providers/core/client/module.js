@@ -277,6 +277,6 @@ module.exports.messages = {
 module.exports.setup = async (coreEnv) => {
     log = coreEnv.log
 
-    clientRecords = coreEnv.db.collection('clients')
-    tokenRecords = coreEnv.db.collection('clientTokens')
+    clientRecords = coreEnv.db.collection('morrigan.clients')
+    tokenRecords  = coreEnv.db.collection('morrigan.clients.tokens')
 }

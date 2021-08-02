@@ -161,7 +161,7 @@ mongoClient.connect(serverSettings.database.connectionString, { useUnifiedTopolo
 
     log('Setting up instance reporting...')
 
-    const instances = database.collection('instances')
+    const instances = database.collection('morrigan.instances')
 
     const selector = {id: serverInfo.id}
     let remoteRecord = await instances.findOne(selector)
