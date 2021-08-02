@@ -18,10 +18,6 @@ async function getClients() {
     return await clientRecords.find().toArray()
 }
 
-async function removeClient(clientId) {
-    await clientRecords.deleteOne({ id: clientId})
-}
-
 /**
  * Provisions resources for a client with the given clientId.
  * 
@@ -59,6 +55,22 @@ async function provisionClient(clientId){
 
     return t
 
+}
+
+async function deprovisionClient(clientId) {
+    let client = await getClient(clientId)
+
+    if (!client) {
+        return false
+    }
+
+    await clientRecords.deleteOne({id: client.id})
+
+    if (client.tokenId) {
+        await tokenRecords.deleteOne({id: client.tokenId})
+    }
+
+    return true
 }
 
 /**
@@ -169,9 +181,9 @@ async function verifyToken(signedToken) {
 
 module.exports.verifyToken      = verifyToken
 module.exports.provisionClient  = provisionClient
+module.exports.deprovisionClient= deprovisionClient
 module.exports.provisionToken   = provisionToken
 module.exports.getClient        = getClient
-module.exports.removeClient     = removeClient
 
 /* =========== Start Endpoint Definition ============== */
 
@@ -212,10 +224,31 @@ async function ep_getClients(req, res) {
     res.send(JSON.stringify(await getClients()))
 }
 
+async function ep_deprovisionClient(req, res) {
+    if (!req.params || !req.params.clientId) {
+        res.status(400)
+        res.send('No client ID provided.')
+    }
+
+    deprovisionClient(req.params.clientId).then(o => {
+        if (o) {
+            res.status(200)
+            res.end()
+        } else {
+            res.status(204)
+            res.end()
+        }
+    }).catch(e => {
+        res.status(500)
+        res.end()
+    })
+}
+
 module.exports.endpoints = [
     {route: '/', method: 'get', handler: ep_getClients},
     {route: '/provision', method: 'post', handler: ep_provisionClient},
-    {route: '/:clientId', method: 'get', handler: ep_getClients}
+    {route: '/:clientId', method: 'get', handler: ep_getClients},
+    {route: '/:clientId', method: 'delete', handler: ep_deprovisionClient}
 ]
 
 module.exports.messages = {
