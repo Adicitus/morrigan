@@ -10,6 +10,12 @@ var connectionRecords = null
 var sockets = {}
 var heartbeats = {}
 
+var callbacks = {
+    onConnect: [],
+    onAuthenticate: [],
+    onDisconnect: []
+}
+
 /**
  * Sends the given message object accross the given connection.
  * @param {string} connectionId The ID of the connection through which to send the message.
@@ -52,6 +58,7 @@ var send = async (connectionId, message) => {
 async function cleanup (connectionId) {
 
     let ws = sockets[connectionId]
+    delete sockets[connectionId]
 
     if (ws && ws.readyState == 1) {
         ws.close()
@@ -87,6 +94,9 @@ async function ep_wsConnect (ws, request) {
 
     log(`Connection ${record.id} established from ${request.connection.remoteAddress}`)
     sockets[record.id]  = ws
+    for (let i in callbacks.onConnect) {
+        callbacks.onConnect[i](record, ws)
+    }
 
     let r = await coreEnv.providers.client.verifyToken(request.headers.origin)
 
@@ -118,6 +128,10 @@ async function ep_wsConnect (ws, request) {
     record.authenticated = true
     record.clientId = client.id
     record.serverId = coreEnv.serverInfo.id
+    
+    for (let i in callbacks.onAuthenticate) {
+        callbacks.onAuthenticate[i](record, ws)
+    }
 
     connectionRecords.insertOne(record)
 
@@ -188,6 +202,11 @@ async function ep_wsConnect (ws, request) {
                 client.state = 'unknown'
             }
         }
+
+        for (let i in callbacks.onDisconnect) {
+            callbacks.onDisconnect[i](record, ws)
+        }
+
         cleanup(record.id)
     })
 
@@ -302,6 +321,18 @@ module.exports.onShutdown = async () => {
 
         cleanup(cid)
     }
+}
+
+module.exports.onConnect = (callback) => {
+    callbacks.onConnect.push(callback)
+}
+
+module.exports.onAuthenticate = (callback) => {
+    callbacks.onAuthenticate.push(callback)
+}
+
+module.exports.onDisconnect = (callback) => {
+    callbacks.onDisconnect.push(callback)
 }
 
 module.exports.send = send
