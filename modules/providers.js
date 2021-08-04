@@ -66,7 +66,7 @@ module.exports.setup = async (app, uriRoot, providersDir, environment, providers
         let provider = providers[p]
         let promises = []
         if (provider.setup) {
-            promises.push(provider.setup(environment))
+            promises.push(provider.setup(environment, providers))
         }
         await Promise.all(promises)
     }
