@@ -8,7 +8,7 @@ process.title = "morrigan.server"
 const serverSettings = require('./server.settings')
 
 var port = 1337
-if (serverSettings.http.port) {
+if (serverSettings.http && serverSettings.http.port) {
     port = serverSettings.http.port
 }
 
@@ -216,6 +216,9 @@ mongoClient.connect(serverSettings.database.connectionString, { useUnifiedTopolo
     log('Finished instance reporting setup.')
 
 }).catch(err => {
-    log('Failed to connect to database server.')
+    log('Error while connecting to DB:')
     log(err)
+    if (err.stack) {
+        log(err.stack)
+    }
 })
