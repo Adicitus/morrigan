@@ -12,7 +12,7 @@ module.exports.build = (stateDirPath) => {
     }
 
     let versionFilePath = `${__dirname}/version`
-    info.version = fs.readFileSync(versionFilePath)
+    info.version = fs.readFileSync(versionFilePath, { encoding: 'utf8' })
     info.serverRoot = __dirname
 
     info.startTime = DateTime.now().toISO()
