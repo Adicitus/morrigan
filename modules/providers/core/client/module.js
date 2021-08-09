@@ -1,4 +1,4 @@
-module.exports.version = '0.1.0.0'
+module.exports.version = '0.1.0.4'
 
 const { DateTime } = require('luxon')
 const jwt  = require('jsonwebtoken')

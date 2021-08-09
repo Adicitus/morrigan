@@ -293,7 +293,7 @@ function ep_send(req, res) {
 }
 
 
-module.exports.version = '0.1.0.0',
+module.exports.version = '0.1.0.9',
 module.exports.endpoints = [
     {route: '/connect', method: 'ws', handler: ep_wsConnect},
     {route: '/', method: 'get', handler: ep_getConnections},
