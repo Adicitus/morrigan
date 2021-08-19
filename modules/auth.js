@@ -78,12 +78,9 @@ log(access)
 const { DateTime } = require('luxon')
 const jwt = require('jsonwebtoken')
 const {v4: uuidv4} = require('uuid')
-
-const secret = uuidv4()
+const RSA = require('node-rsa')
 
 /**
- * Temporary hard-coded list of supported authentication types.
- *
  * Each authentication type should have be defined by a
  * corresponding autehntication provider.
  * 
@@ -101,10 +98,21 @@ const secret = uuidv4()
  */
 var authTypes = null
 
-// Temporary list of users, this should be moved into a DB.
+var publicKey = null
+var privateKey = null
+var keyUpdateInterval = null
+
+var serverId = null
 var identityRecords = null
 var authenticationRecords = null
 var tokenRecords = null
+
+async function generateKeys() {
+    log('Generating RSA key pair...')
+    let keyPair = new RSA({b:2048})
+    publicKey = keyPair.exportKey('pkcs8-public-pem')
+    privateKey = keyPair.exportKey('pkcs8-private-pem')
+}
 
 /**
  * Verifies a set of identity details versus the expected format and returns a sanitized record if successful.
@@ -299,17 +307,18 @@ async function authenticate(details) {
 async function newToken(identity, options) {
     var now = DateTime.now()
     var validTo = now.plus({minutes: 30})
-    var secret = uuidv4()
 
     var tokenRecord = {
         id: uuidv4(),
         identityId: identity.id,
-        secret: secret,
+        issuer: serverId,
+        key: publicKey,
         expires: validTo
     }
 
     var payload = {
         identity: identity.id,
+        iss: serverId,
         iat: Math.round(now.toSeconds()),
         exp: Math.round(now.plus({minutes: 30}).toSeconds())
     }
@@ -320,11 +329,7 @@ async function newToken(identity, options) {
         }
     }
 
-    if (identity.functions) {
-        payload.functions = identity.functions
-    }
-
-    var t = jwt.sign(payload, secret)
+    var t = jwt.sign(payload, privateKey, {algorithm: 'RS256'})
 
     var currentTokenRecord = await tokenRecords.findOne({identityId: identity.id})
 
@@ -366,8 +371,11 @@ async function verifyToken(signedToken) {
     let token = m.groups.token
 
     try {
-        jwt.verify(token, tokenRecord.secret)
-        let p = jwt.decode(token, tokenRecord.secret)
+        let p = jwt.verify(token, tokenRecord.key, {algorithm: 'RS256'})
+
+        if (p.iss !== tokenRecord.issuer) {
+            return null
+        }
 
         let i = identityRecords.findOne({id: p.identity})
         if(!i) {
@@ -563,6 +571,8 @@ module.exports.verifyToken = verifyToken
  */
 module.exports.setup = async (path, app, serverEnv) => {
     
+    serverId = serverEnv.info.id
+
     let settings = serverEnv.settings
 
     log = serverEnv.log
@@ -576,6 +586,10 @@ module.exports.setup = async (path, app, serverEnv) => {
             providerPaths.push(a)
         }
     }
+
+    await generateKeys()
+    // Update the RSA keys every 4 hours:
+    keyUpdateInterval = setInterval(generateKeys, (4 * 3600 * 1000))
 
     authTypes = await require('./providers').setup(app, path, providerPaths, { 'log': log })
 
@@ -844,6 +858,12 @@ module.exports.setup = async (path, app, serverEnv) => {
 
         res.send(JSON.stringify(r))
     })
+}
+
+module.exports.onShutdown = async () => {
+    if (keyUpdateInterval !== null) {
+        clearInterval(keyUpdateInterval)
+    }
 }
 
 // Middleware to verify the authorization header.
