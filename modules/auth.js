@@ -310,17 +310,15 @@ async function newToken(identity, options) {
 
     var tokenRecord = {
         id: uuidv4(),
-        identityId: identity.id,
+        identity: identity.id,
         issuer: serverId,
         key: publicKey,
         expires: validTo
     }
 
     var payload = {
-        identity: identity.id,
-        iss: serverId,
-        iat: Math.round(now.toSeconds()),
-        exp: Math.round(now.plus({minutes: 30}).toSeconds())
+        sub: identity.id,
+        iss: serverId
     }
 
     if (options) {
@@ -329,7 +327,7 @@ async function newToken(identity, options) {
         }
     }
 
-    var t = jwt.sign(payload, privateKey, {algorithm: 'RS256'})
+    var token = jwt.sign(payload, privateKey, {algorithm: 'RS256', expiresIn: '0.5h', keyid: tokenRecord.id})
 
     var currentTokenRecord = await tokenRecords.findOne({identityId: identity.id})
 
@@ -339,10 +337,7 @@ async function newToken(identity, options) {
         tokenRecords.insertOne(tokenRecord)
     }
 
-    let b64Id = Buffer.from(tokenRecord.id).toString('base64')
-    let signedToken = b64Id + "." + t
-
-    return signedToken
+    return token
 }
 
 /**
@@ -350,34 +345,18 @@ async function newToken(identity, options) {
  * 
  * @param {string} token - Token to validate.
  */
-async function verifyToken(signedToken) {
-
-    const signedTokenRegex = /(?<tokenId>[^.]+)\.(?<token>[^.]+\.[^.]+\.[^.]+)/
-    
-    let m = signedToken.match(signedTokenRegex)
-
-    if (!m) {
-        return null
-    }
-
-    let tokenId = Buffer.from(m.groups.tokenId, 'base64').toString()
-
-    let tokenRecord = await tokenRecords.findOne({id: tokenId})
-
-    if (!tokenRecord) {
-        return null
-    }
-
-    let token = m.groups.token
-
+async function verifyToken(token) {
     try {
-        let p = jwt.verify(token, tokenRecord.key, {algorithm: 'RS256'})
+        let dt = jwt.decode(token, {complete: true})
+        let tokenRecord = await tokenRecords.findOne({id: dt.header.kid})
 
-        if (p.iss !== tokenRecord.issuer) {
+        if (!tokenRecord) {
             return null
         }
 
-        let i = identityRecords.findOne({id: p.identity})
+        jwt.verify(token, tokenRecord.key, {issuer: tokenRecord.issuer, subject: tokenRecord.identity})
+
+        let i = identityRecords.findOne({id: tokenRecord.identity})
         if(!i) {
             return null
         }
