@@ -341,7 +341,11 @@ async function newToken(identity, options) {
 }
 
 /**
- * Attempts to validate the provided token. Returns the payload as an object if the token is valid.
+ * Attempts to validate the provided token.
+ * 
+ * Returns the idenitity of the user if the token is valid.
+ * 
+ * Otherwise returns NULL.
  * 
  * @param {string} token - Token to validate.
  */
