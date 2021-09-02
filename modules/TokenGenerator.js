@@ -20,7 +20,7 @@ class TokenGenerator {
      * Create a new token generator.
      * 
      * options:
-     *  - id: Manually assigned id for this generator.
+     *  - id: Manually assigned id for this generator. If not specified, a UUID will be generated.
      *  - collection: MongoDB collection to record tokens in. If this is not provided then records must be stored and retrieved manualy.'
      *  - keyLifetime: How often the keys should be regenerated. Setting this to 0 or less will cause the keys to be regenerated after each new token (luxon duration object).
      *  - tokenLifetime: How long the tokens should remain valid by default (luxon duration object).
@@ -33,7 +33,6 @@ class TokenGenerator {
         let keyLifetime = Duration.fromObject({minutes: 60})
         
         if (options) {
-            console.log("Test")
             if (options.id) {
                 this.id = options.id
             }
@@ -114,12 +113,12 @@ class TokenGenerator {
         var token = jwt.sign(payload, this.privateKey, {algorithm: this.algorithm, expiresIn: `${duration.as('hour')}h`, keyid: tokenRecord.id})
 
         if (this.tokenCollection) {
-            var currentTokenRecord = await tokenCollection.findOne({identityId: identity.id})
+            var currentTokenRecord = await this.tokenCollection.findOne({subject: subject})
 
             if (currentTokenRecord) {
-                tokenCollection.replaceOne({id: currentTokenRecord.id}, tokenRecord)
+                this.tokenCollection.replaceOne({id: currentTokenRecord.id}, tokenRecord)
             } else {
-                tokenCollection.insertOne(tokenRecord)
+                this.tokenCollection.insertOne(tokenRecord)
             }
         }
         
@@ -147,13 +146,12 @@ class TokenGenerator {
     async verifyToken(token, options) {
         try {
             let dt = jwt.decode(token, {complete: true})
-            
             let tokenRecord = null
 
-            if (options.record) {
+            if (options && options.record) {
                 tokenRecord = options.record
             } else if (this.tokenCollection) {
-                tokenRecord = await tokenCollection.findOne({id: dt.header.kid})
+                tokenRecord = await this.tokenCollection.findOne({id: dt.header.kid})
             } else {
                 return { success: false, status: 'noRecordError', reason: 'No record source available.' }
             }
