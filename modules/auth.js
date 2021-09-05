@@ -78,7 +78,9 @@ log(access)
 const { DateTime } = require('luxon')
 const jwt = require('jsonwebtoken')
 const {v4: uuidv4} = require('uuid')
-const RSA = require('node-rsa')
+const Crypto = require('crypto')
+
+const TokenGenerator = require('./TokenGenerator')
 
 /**
  * Each authentication type should have be defined by a
@@ -98,21 +100,12 @@ const RSA = require('node-rsa')
  */
 var authTypes = null
 
-var publicKey = null
-var privateKey = null
-var keyUpdateInterval = null
+var tokens = null
 
 var serverId = null
 var identityRecords = null
 var authenticationRecords = null
 var tokenRecords = null
-
-async function generateKeys() {
-    log('Generating RSA key pair...')
-    let keyPair = new RSA({b:2048})
-    publicKey = keyPair.exportKey('pkcs8-public-pem')
-    privateKey = keyPair.exportKey('pkcs8-private-pem')
-}
 
 /**
  * Verifies a set of identity details versus the expected format and returns a sanitized record if successful.
@@ -289,87 +282,10 @@ async function authenticate(details) {
         return r
     }
 
-    var t = await newToken(identity)
-    r.token = t
+    var t = await tokens.newToken(identity.id)
+    r.token = t.token
 
     return r
-}
-
-/**
- * Used to generate a token for the provided identity.
- * 
- * Options:
- *  - duration: A luxon duration to to define how long the token should be valid.
- * 
- * @param {object} identity - Details of the identity to create a token for.
- * @param {object} options  - Options to modify the way that the token is generated
- */
-async function newToken(identity, options) {
-    var now = DateTime.now()
-    var validTo = now.plus({minutes: 30})
-
-    var tokenRecord = {
-        id: uuidv4(),
-        identity: identity.id,
-        issuer: serverId,
-        key: publicKey,
-        expires: validTo
-    }
-
-    var payload = {
-        sub: identity.id,
-        iss: serverId
-    }
-
-    if (options) {
-        if (options.duration) {
-            payload.exp = Math.round(validTo.toSeconds())
-        }
-    }
-
-    var token = jwt.sign(payload, privateKey, {algorithm: 'RS256', expiresIn: '0.5h', keyid: tokenRecord.id})
-
-    var currentTokenRecord = await tokenRecords.findOne({identityId: identity.id})
-
-    if (currentTokenRecord) {
-        tokenRecords.replaceOne({id: currentTokenRecord.id}, tokenRecord)
-    } else {
-        tokenRecords.insertOne(tokenRecord)
-    }
-
-    return token
-}
-
-/**
- * Attempts to validate the provided token.
- * 
- * Returns the idenitity of the user if the token is valid.
- * 
- * Otherwise returns NULL.
- * 
- * @param {string} token - Token to validate.
- */
-async function verifyToken(token) {
-    try {
-        let dt = jwt.decode(token, {complete: true})
-        let tokenRecord = await tokenRecords.findOne({id: dt.header.kid})
-
-        if (!tokenRecord) {
-            return null
-        }
-
-        jwt.verify(token, tokenRecord.key, {issuer: tokenRecord.issuer, subject: tokenRecord.identity})
-
-        let i = identityRecords.findOne({id: tokenRecord.identity})
-        if(!i) {
-            return null
-        }
-
-        return i
-
-    } catch {
-        return null
-    }
 }
 
 /**
@@ -539,8 +455,6 @@ async function removeIdentity(identityId){
 module.exports.addIdentity = addIdentity
 module.exports.setIdentity = setIdentity
 module.exports.removeIdentity = removeIdentity
-module.exports.validateIdentitySpec = validateIdentitySpec
-module.exports.verifyToken = verifyToken
 
 /**
  * Used to set up authentication endpoints.
@@ -570,15 +484,13 @@ module.exports.setup = async (path, app, serverEnv) => {
         }
     }
 
-    await generateKeys()
-    // Update the RSA keys every 4 hours:
-    keyUpdateInterval = setInterval(generateKeys, (4 * 3600 * 1000))
-
     authTypes = await require('./providers').setup(app, path, providerPaths, { 'log': log })
 
     identityRecords = serverEnv.db.collection('morrigan.identities')
     tokenRecords = serverEnv.db.collection('morrigan.identities.tokens')
     authenticationRecords = serverEnv.db.collection('morrigan.authentication')
+
+    tokens = new TokenGenerator({id: serverId, collection: tokenRecords, keyLifetime: { hours: 4 }})
 
     let identities = await identityRecords.find().toArray()
     let authentications = await await authenticationRecords.find().toArray()
@@ -844,9 +756,7 @@ module.exports.setup = async (path, app, serverEnv) => {
 }
 
 module.exports.onShutdown = async () => {
-    if (keyUpdateInterval !== null) {
-        clearInterval(keyUpdateInterval)
-    }
+    tokens.dispose()
 }
 
 // Middleware to verify the authorization header.
@@ -858,10 +768,13 @@ module.exports.mw_verify = async (req, res, next) => {
         var m = auth.match(/^(?<type>bearer) (?<token>.+)/)
         
         if (m) {
-            var identity = await verifyToken(m.groups.token)
-            
-            if (identity) {
-                req.authenticated = identity
+            let r  = await tokens.verifyToken(m.groups.token)
+            if (r.success) {
+                var identity = await identityRecords.findOne({id: r.subject})
+
+                if (identity) {
+                    req.authenticated = identity
+                }
             }
         }
     }
