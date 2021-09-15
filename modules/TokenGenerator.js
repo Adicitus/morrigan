@@ -75,6 +75,8 @@ class TokenGenerator {
      * 
      * Options:
      *  - duration: A luxon duration to to define how long the token should be valid.
+     *              This can be used to override the default set when the instance is created, but should otherwise not be used.
+     *  - conext: An object or primitive to provide additional information on the subject.
      * 
      * @param {object} subject - Subject authenticated by this token.
      * @param {object} options - Additional options.
@@ -84,12 +86,24 @@ class TokenGenerator {
         let now = DateTime.now()
 
         let duration = this.tokenLifetime
+        let context = null
 
-        if (options && options.tokenLifetime) {
-            if (options.tokenLifetime.isLuxonDuration) {
-                duration = new Duration(options.tokenLifetime)
-            } else {
-                duration = Duration.fromObject(options.tokenLifetime)
+        
+        var payload = {
+            sub: subject,
+            iss: this.id
+        }
+
+        if (options) {
+            if (options.tokenLifetime) {
+                if (options.tokenLifetime.isLuxonDuration) {
+                    duration = new Duration(options.tokenLifetime)
+                } else {
+                    duration = Duration.fromObject(options.tokenLifetime)
+                }
+            }
+            if(options.context) {
+                payload.context = options.context
             }
         }
 
@@ -102,12 +116,6 @@ class TokenGenerator {
             key: this.publicKey,
             issued: now,
             expires: validTo
-        }
-
-        var payload = {
-            sub: subject,
-            iss: this.id
-            
         }
 
         var token = jwt.sign(payload, this.privateKey, {algorithm: this.algorithm, expiresIn: `${duration.as('hour')}h`, keyid: tokenRecord.id})
@@ -166,7 +174,13 @@ class TokenGenerator {
 
             jwt.verify(token, tokenRecord.key, {issuer: tokenRecord.issuer, subject: tokenRecord.subject})
 
-            return { success: true, subject: tokenRecord.subject }
+            let r = { success: true, subject: tokenRecord.subject }
+
+            if (dt.context) {
+                r.context = dt.context
+            }
+
+            return r
 
         } catch {
             return { success: false, status: 'invalidTokenError', reason: 'Token does not match key on record or is expired.' }
