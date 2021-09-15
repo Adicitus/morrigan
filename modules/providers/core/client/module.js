@@ -3,9 +3,12 @@ module.exports.version = '0.1.0.4'
 const { DateTime } = require('luxon')
 const jwt  = require('jsonwebtoken')
 const {v4: uuidv4} = require('uuid')
+const TokenGenerator = require('./../../../TokenGenerator')
+
 
 var clientRecords = null
 var tokenRecords = null
+var tokens = null
 
 var log = null
 
@@ -46,14 +49,14 @@ async function provisionClient(clientId){
         await clientRecords.insertOne(record)
     }
 
-    let t = await provisionToken(clientId)
+    let t = await tokens.newToken(clientId)
 
-    record.tokenId = t.id
+    record.tokenId = t.record.id
     record.updated = DateTime.now()
 
     clientRecords.replaceOne({id: record.id}, record)
 
-    return t
+    return t.token
 
 }
 
@@ -74,52 +77,6 @@ async function deprovisionClient(clientId) {
 }
 
 /**
- * Provisions a new token for the client with the given clientId.
- * 
- * This function returns an object containing a token that the client should
- * use when connecting via WebSocket, the ID of the token for the client and
- * the expiry date/time of the token.
- * 
- * @param {string} clientId - ID of the client to provision a token for.
- */
-async function provisionToken(clientId) {
-
-    let now = DateTime.now()
-    let newTokenId = uuidv4()
-
-    let record = {
-        id: newTokenId,
-        clientId: clientId,
-        tokenIssued: now,
-        tokenExpires: now.plus({days: 30}),
-        secret: uuidv4()
-    }
-
-    let payload = {
-        id: newTokenId,
-        clientId: clientId,
-        iat: Math.round(record.tokenIssued.toSeconds()),
-        exp: Math.round(record.tokenExpires.toSeconds())
-    }
-
-    let token = jwt.sign(payload, record.secret)
-    let encId = Buffer.from(clientId).toString('base64')
-    let signedToken = encId + "." + token
-
-    let t = await tokenRecords.findOne({clientId: clientId})
-
-    if (t) {
-        tokenRecords.replaceOne({clientId: clientId}, record)
-    } else {
-        tokenRecords.insertOne(record)
-    }
-
-    log(`New token issued for client '${clientId}'.`)
-
-    return { id: newTokenId, expires: record.tokenExpires, token: signedToken }
-}
-
-/**
  * Attempts to verify the validity of a token.
  * 
  * Will return a object with a 'state' field and a data field.
@@ -130,59 +87,23 @@ async function provisionToken(clientId) {
  * If verification was unsuccessful, there will be a 'reason' with a shot
  * description of what went wrong.
  * 
- * @param {string} signedToken - The token to verify.
+ * @param {string} token - The token to verify.
  */
-async function verifyToken(signedToken) {
+async function verifyToken(token) {
 
-    if ((typeof signedToken) !== 'string') {
-        return { state: 'authenticationfailed', reason: 'Invalid token type.'}
+    let r = await tokens.verifyToken(token)
+
+    if (r.success) {
+        let client = await getClient(r.subject)
+        return { state: 'success', client: client }
     }
 
-    const signedTokenRegex = /(?<clientId>[^.]+)\.(?<token>[^.]+\.[^.]+\.[^.]+)/
-    
-    let m = signedToken.match(signedTokenRegex)
-
-    if (!m) {
-        return { state: 'authenticationfailed', reason: 'Invalid token format.'}
-    }
-
-    let clientId = Buffer.from(m.groups.clientId, 'base64').toString()
-
-    let token = await tokenRecords.findOne({ clientId: clientId })
-
-    if (!token) {
-        return { state: 'authenticationFailed', reason: 'No such client.' }
-    }
-
-    let t = m.groups.token
-
-    try {
-        jwt.verify(t, token.secret)
-    } catch(e) {
-        return { state: 'authenticationFailed', reason: 'Token unreadable.' }
-    }
-
-    let p = jwt.decode(t, token.secret)
-
-    if (p.clientId != token.clientId) {
-        // Someone is forging tokens.
-        return { state: 'authenticationFailed', reason: 'Token signing mismatch.' }
-    }
-
-    if (p.id != token.id) {
-        // Wrong token provided, probably an old token from a client that has been reprovisioned.
-        return { state: 'authenticationFailed', reason: 'Token ID mismatch.' }
-    }
-
-    let client = await getClient(token.clientId)
-
-    return { state: 'success', client: client }
+    return { state: 'authenticationfailed', status: r.status, reason: r.reason }
 }
 
 module.exports.verifyToken      = verifyToken
 module.exports.provisionClient  = provisionClient
 module.exports.deprovisionClient= deprovisionClient
-module.exports.provisionToken   = provisionToken
 module.exports.getClient        = getClient
 
 /* =========== Start Endpoint Definition ============== */
@@ -258,11 +179,11 @@ module.exports.messages = {
      */
     'token.refresh': async (message, connection, record, core) => {
         core.log(`Client ${record.clientId} requested a new token.`)
-        let r = await provisionToken(record.clientId)
+        let r = await tokens.newToken(record.clientId)
         connection.send(JSON.stringify({
             type: 'client.token.issue',
             token: r.token,
-            expires: r.expires
+            expires: r.record.expires.toISO()
         }))
     },
 
@@ -279,4 +200,10 @@ module.exports.setup = async (coreEnv) => {
 
     clientRecords = coreEnv.db.collection('morrigan.clients')
     tokenRecords  = coreEnv.db.collection('morrigan.clients.tokens')
+    tokens = new TokenGenerator({
+        id: coreEnv.serverInfo.id,
+        collection: tokenRecords,
+        tokenLifetime: { days: 30 },
+        keyLifetime: { hours: 8 }
+    })
 }
