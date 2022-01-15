@@ -5,7 +5,7 @@ const { DateTime, Duration } = require('luxon')
 
 class TokenGenerator {
 
-    keyLength = 256
+    keyLength = 1024
     algorithm = 'ES256'
 
     tokenLifetime = null
@@ -153,13 +153,13 @@ class TokenGenerator {
      */
     async verifyToken(token, options) {
         try {
-            let dt = jwt.decode(token, {complete: true})
+            let {header, payload} = jwt.decode(token, {complete: true})
             let tokenRecord = null
 
             if (options && options.record) {
                 tokenRecord = options.record
             } else if (this.tokenCollection) {
-                tokenRecord = await this.tokenCollection.findOne({id: dt.header.kid})
+                tokenRecord = await this.tokenCollection.findOne({id: header.kid})
             } else {
                 return { success: false, status: 'noRecordError', reason: 'No record source available.' }
             }
@@ -176,8 +176,8 @@ class TokenGenerator {
 
             let r = { success: true, subject: tokenRecord.subject }
 
-            if (dt.context) {
-                r.context = dt.context
+            if (payload.context) {
+                r.context = payload.context
             }
 
             return r
