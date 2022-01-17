@@ -1,7 +1,10 @@
 "use strict"
-const morgan = require('morgan')
 const fs = require('fs')
 const { DateTime } = require('luxon')
+const express = require('express')
+const expressws = require('express-ws')
+const bodyParser = require('body-parser')
+const logger =  require('./modules/logger')
 
 process.title = "morrigan.server"
 
@@ -12,22 +15,17 @@ if (serverSettings.http && serverSettings.http.port) {
     port = serverSettings.http.port
 }
 
-console.log('Setting up logging...')
-const logger =  require('./modules/logger')
-if (serverSettings.logger) {
-    logger.setup(serverSettings.logger)
-}
-const log = logger.log
+// App is defined here since it wil be needed when creating the server.
+var app = express()
 
+console.log('Setting up logging...')
+logger.setup(app, serverSettings.logger)
+const log = logger.log
 log('Finished setting up logging.')
 
 log(`Reading server state (looking in '${serverSettings.stateDir}')...`)
 const serverInfo = require('./server.info').build(serverSettings.stateDir)
 log('Finished reading server state.')
-
-const express = require('express')
-const expressws = require('express-ws')
-const bodyParser = require('body-parser')
 
 const auth = require('./modules/APIAuth')
 
@@ -42,9 +40,6 @@ const components = [
     {module: auth, route: '/auth'},
     {module: require('./modules/APICore'), route: '/api'}
 ]
-
-// App is defined here since it wil be needed when creating the server.
-var app = express()
 
 var server = null
 if (serverSettings.http) {
@@ -110,18 +105,6 @@ if (!server) {
 
 // Apply WebSocket logic to the application/server:
 expressws(app, server)
-
-// Setup request logging:
-app.use(
-    morgan(
-        '--> :remote-addr :method :url :status - :res[content-length]b :response-time ms',
-        {
-            stream: {
-                write: (msg) => log(msg.trim())
-            }
-        }
-    )
-)
 
 // All request bodies should be treated as 'application.json':
 app.use(bodyParser.json())

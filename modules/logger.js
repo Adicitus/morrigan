@@ -1,6 +1,7 @@
 const fs = require('fs')
 const winston = require('winston')
 require('winston-daily-rotate-file')
+const morgan = require('morgan')
 
 const logFormat = winston.format.printf(({level, message, timestamp}) => {
     return `${timestamp} ${level.padEnd(7)} | ${message}`
@@ -25,7 +26,12 @@ const logger = winston.createLogger({
  *  - logDir  {string}:  Folder to store log files in (remove or leave empty to disable file logging).
  * @param {object} settings 
  */
-module.exports.setup = (settings) => {
+module.exports.setup = (app, settings) => {
+
+    if (!settings) {
+        settings = {}
+    }
+
     if (settings.console !== undefined && settings.console === false) {
         logger.remove(consoleLogger)
     } else {
@@ -70,6 +76,19 @@ module.exports.setup = (settings) => {
 
         logger.add(transport)
     }
+    
+
+    // Setup request logging:
+    app.use(
+        morgan(
+            '--> :remote-addr :method :url :status - :res[content-length]b :response-time ms',
+            {
+                stream: {
+                    write: (msg) => this.log(msg.trim())
+                }
+            }
+        )
+    )
 }
 
 module.exports.log = (msg, level) => {
