@@ -29,6 +29,7 @@ const express = require('express')
 const expressws = require('express-ws')
 const bodyParser = require('body-parser')
 
+const auth = require('./modules/APIAuth')
 
 /**
  * Use the components array to specify which components to use and which order to configure them in.
@@ -37,10 +38,9 @@ const bodyParser = require('body-parser')
  * Loading the components here will prevent the server from starting in case there are any issues
  * with loading the modules (this is the indended behavior: fail fast).
  */
-const auth = require('./modules/auth')
 const components = [
     {module: auth, route: '/auth'},
-    {module: require('./modules/core'), route: '/api'}
+    {module: require('./modules/APICore'), route: '/api'}
 ]
 
 // App is defined here since it wil be needed when creating the server.
@@ -128,7 +128,7 @@ app.use(bodyParser.json())
 
 // Add middleware to verify authentication and make authorization details
 // available to downstreams handlers:
-app.use(auth.mw_verify)
+app.use(auth.getVerifyMW())
 
 
 // Establish connection to MongoDB:
