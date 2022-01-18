@@ -88,7 +88,7 @@ class APICore {
             }
         }
 
-        this.coreEnv.providers = await require('./providers').setup(app, path, providerPaths, this.coreEnv)
+        this.coreEnv.providers = await require('./Providers').setup(app, path, providerPaths, this.coreEnv)
 
     }
 

@@ -4,7 +4,7 @@ const { DateTime } = require('luxon')
 const express = require('express')
 const expressws = require('express-ws')
 const bodyParser = require('body-parser')
-const logger =  require('./modules/logger')
+const logger =  require('./modules/Logger')
 
 process.title = "morrigan.server"
 
@@ -20,7 +20,7 @@ var app = express()
 
 console.log('Setting up logging...')
 logger.setup(app, serverSettings.logger)
-const log = logger.log
+const log = logger.getLog()
 log('Finished setting up logging.')
 
 log(`Reading server state (looking in '${serverSettings.stateDir}')...`)

@@ -490,7 +490,7 @@ class APIAuth {
             }
         }
 
-        this.authTypes = await require('./providers').setup(app, path, providerPaths, { 'log': this.log })
+        this.authTypes = await require('./Providers').setup(app, path, providerPaths, { 'log': this.log })
 
         this.identityRecords = serverEnv.db.collection('morrigan.identities')
         this.tokenRecords = serverEnv.db.collection('morrigan.identities.tokens')
