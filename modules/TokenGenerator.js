@@ -3,6 +3,9 @@ const {v4: uuidv4} = require('uuid')
 const Crypto = require('crypto')
 const { DateTime, Duration } = require('luxon')
 
+/**
+ * Class to facilitate the creation and verification JSON Web Tokens.
+ */
 class TokenGenerator {
 
     keyLength = 1024
@@ -10,10 +13,25 @@ class TokenGenerator {
 
     tokenLifetime = null
 
+    /**
+     * ID of this generator. This value will be included as the issuer of any tokens generated.
+     */
     id = null
+    /**
+     * The current public key used when generating tokens.
+     */
     publicKey = null
+    /**
+     * The current private key used when generating tokens.
+     */
     privateKey = null
+    /**
+     * Interval object used to continuously update key pair.
+     */
     keyUpdateInterval = null
+    /**
+     * MongoDB collection used to store token verification records.
+     */
     tokenCollection = null
 
     /**
@@ -22,7 +40,7 @@ class TokenGenerator {
      * options:
      *  - id: Manually assigned id for this generator. If not specified, a UUID will be generated.
      *  - collection: MongoDB collection to record tokens in. If this is not provided then records must be stored and retrieved manualy.'
-     *  - keyLifetime: How often the keys should be regenerated. Setting this to 0 or less will cause the keys to be regenerated after each new token (luxon duration object).
+     *  - keyLifetime: How often the keys should be regenerated (luxon duration object). Setting this to 0 or less will cause the keys to be regenerated after each new token.
      *  - tokenLifetime: How long the tokens should remain valid by default (luxon duration object).
      * @param {object} options - Additional options to customize the generator.
      */
@@ -76,17 +94,20 @@ class TokenGenerator {
      * Options:
      *  - duration: A luxon duration to to define how long the token should be valid.
      *              This can be used to override the default set when the instance is created, but should otherwise not be used.
-     *  - conext: An object or primitive to provide additional information on the subject.
+     *  - context: An object or primitive to provide additional information on the subject.
      * 
      * @param {object} subject - Subject authenticated by this token.
      * @param {object} options - Additional options.
+     * @returns {object} Object containing 2 properties: "record" and "token".
+     *  - record: An object containing information necessary to verify the validity of the token, and should be stored by the server.
+     *      - If the generator has been set up with a MongoDB collection, then the record will automatically be stored there.
+     *  - token: A string representation of the token, this should be passed to the client. 
      */
     async newToken(subject, options) {
 
         let now = DateTime.now()
 
         let duration = this.tokenLifetime
-        let context = null
 
         
         var payload = {
@@ -150,6 +171,12 @@ class TokenGenerator {
      * 
      * @param {string} token - Token to validate.
      * @param {object} options - Additional options.
+     * @returns {object} An object describing the state of the verification, it may contain the following fields:
+     *  - success: A boolean describing whether the token was successfully verified.
+     *  - subject: If the token was verified successfully, this field will indicate the identity of the client.
+     *  - context: If the token was verified successfully and contained a 'context' property it will added here.
+     *  - status: If the verification failed, this short string indicates what caused the failure.
+     *  - reason: If the verification failed, this property may be included to provide a more user-friendly description of what caused the verification to fail.
      */
     async verifyToken(token, options) {
         try {
