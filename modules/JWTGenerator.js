@@ -6,7 +6,7 @@ const { DateTime, Duration } = require('luxon')
 /**
  * Class to facilitate the creation and verification JSON Web Tokens.
  */
-class TokenGenerator {
+class JWTGenerator {
 
     keyLength = 1024
     algorithm = 'ES256'
@@ -220,4 +220,4 @@ class TokenGenerator {
 
 }
 
-module.exports = TokenGenerator
+module.exports = JWTGenerator

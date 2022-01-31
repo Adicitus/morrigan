@@ -1,11 +1,8 @@
 //APIAuth.js
 "use strict"
 
-const { DateTime } = require('luxon')
-const jwt = require('jsonwebtoken')
 const {v4: uuidv4} = require('uuid')
-const Crypto = require('crypto')
-const TokenGenerator = require('./TokenGenerator')
+const TokenGenerator = require('./JWTGenerator')
 
 /**
  * Class containing Authentication/Authorization functionality of Morrigan.
