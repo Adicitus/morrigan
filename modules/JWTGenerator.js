@@ -4,13 +4,23 @@ const Crypto = require('crypto')
 const { DateTime, Duration } = require('luxon')
 
 /**
- * Class to facilitate the creation and verification JSON Web Tokens.
+ * Class to facilitate the creation and verification of secure/signed JSON Web Tokens using public key cryptography.
  */
 class JWTGenerator {
 
+    /**
+     * Key length to used when generating new key pairs.
+     */
     keyLength = 1024
+    /**
+     * Signing algorithm used when generating the tokens.
+     * 
+     * For a list of supported algorithms see: https://github.com/auth0/node-jws#jwsalgorithms
+     */
     algorithm = 'ES256'
-
+    /**
+     * Luxon Duration object representing the default lifetime of tokens generated.
+     */
     tokenLifetime = null
 
     /**
@@ -20,19 +30,19 @@ class JWTGenerator {
     /**
      * The current public key used when generating tokens.
      */
-    publicKey = null
+    #publicKey = null
     /**
      * The current private key used when generating tokens.
      */
-    privateKey = null
+    #privateKey = null
     /**
      * Interval object used to continuously update key pair.
      */
-    keyUpdateInterval = null
+    #keyUpdateInterval = null
     /**
      * MongoDB collection used to store token verification records.
      */
-    tokenCollection = null
+    #tokenCollection = null
 
     /**
      * Create a new token generator.
@@ -176,6 +186,9 @@ class JWTGenerator {
      *  - subject: If the token was verified successfully, this field will indicate the identity of the client.
      *  - context: If the token was verified successfully and contained a 'context' property it will added here.
      *  - status: If the verification failed, this short string indicates what caused the failure.
+     *      - noRecordError: No record source available or couldn't find a matching record.
+     *      - invalidRecordError: A record was found but is missing the Key ID, Issuer or Subject values.
+     *      - invalidTokenError: The token could not be verified using the key on record or has expired.
      *  - reason: If the verification failed, this property may be included to provide a more user-friendly description of what caused the verification to fail.
      */
     async verifyToken(token, options) {
@@ -214,8 +227,12 @@ class JWTGenerator {
         }
     }
 
+    /**
+     * Stops the regular regeneration of the key pair (if applicable).
+     */
     async dispose() {
         clearInterval(this.keyUpdateInterval)
+        this.keyUpdateInterval = null
     }
 
 }
