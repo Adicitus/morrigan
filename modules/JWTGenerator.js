@@ -129,11 +129,11 @@ class JWTGenerator {
         }
 
         if (options) {
-            if (options.tokenLifetime) {
-                if (options.tokenLifetime.isLuxonDuration) {
-                    duration = new Duration(options.tokenLifetime)
+            if (options.duration) {
+                if (options.duration.isLuxonDuration) {
+                    duration = new Duration(options.duration)
                 } else {
-                    duration = Duration.fromObject(options.tokenLifetime)
+                    duration = Duration.fromObject(options.duration)
                 }
             }
             if(options.payload) {
