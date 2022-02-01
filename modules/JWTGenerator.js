@@ -17,7 +17,7 @@ class JWTGenerator {
     /**
      * Signing algorithm used when generating the tokens.
      * 
-     * For a list of supported algorithms see: https://github.com/auth0/node-jws#jwsalgorithms
+     * For a list of supported algorithms see: [https://github.com/auth0/node-jws#jwsalgorithms](https://github.com/auth0/node-jws#jwsalgorithms).
      */
     algorithm = 'ES256'
     /**
@@ -49,12 +49,11 @@ class JWTGenerator {
     /**
      * Create a new token generator.
      * 
-     * options:
-     *  - id: Manually assigned id for this generator. If not specified, a UUID will be generated.
-     *  - collection: MongoDB collection to record tokens in. If this is not provided then records must be stored and retrieved manualy.'
-     *  - keyLifetime: How often the keys should be regenerated (luxon duration object). Setting this to 0 or less will cause the keys to be regenerated after each new token.
-     *  - tokenLifetime: How long the tokens should remain valid by default (luxon duration object).
      * @param {object} options - Additional options to customize the generator.
+     *  - **id**: Manually assigned id for this generator, this value will be included as the issuer ("iss") of any tokens generated. If not specified, a UUID will be generated.
+     *  - **collection**: MongoDB collection to record tokens in. If this is not provided then records must be stored and retrieved manualy.'
+     *  - **keyLifetime**: How often the keys should be regenerated (luxon duration object). Setting this to 0 or less will cause the keys to be regenerated after each new token.
+     *  - **tokenLifetime**: How long the tokens should remain valid by default (luxon duration object).
      */
     constructor(options) {
         this.id = uuidv4()
@@ -103,18 +102,16 @@ class JWTGenerator {
     /**
      * Used to generate a token for the provided subject.
      * 
-     * Options:
-     *  - duration: A luxon duration to to define how long the token should be valid.
-     *              This can be used to override the default set when the instance is created, but should otherwise not be used.
-     *  - payload: An object with fields/values that should included in the payload, this can be used to include additional custom claims.
-     *             This cannot be used to overwrite the subject ("sub") or issuer ("iss") fields.
-     * 
      * @param {object} subject - Subject authenticated by this token.
      * @param {object} options - Additional options.
+     *  - **duration**: A luxon duration to to define how long the token should be valid.
+     *              This can be used to override the default set when the instance is created, but should otherwise not be used.
+     *  - **payload**: An object with fields/values that should included in the payload, this can be used to include additional custom claims.
+     *              This cannot be used to overwrite the subject ("sub"), issuer ("iss"), issued at ("iat") or expires ("exp") fields.
      * @returns {object} Object containing 2 properties: "record" and "token".
-     *  - record: An object containing information necessary to verify the validity of the token, and should be stored by the server.
+     *  - **record**: An object containing information necessary to verify the validity of the token, and should be stored by the server.
      *      - If the generator has been set up with a MongoDB collection, then the record will automatically be stored there.
-     *  - token: A string representation of the token, this should be passed to the client. 
+     *  - **token**: A string representation of the token, this should be passed to the client. 
      */
     async newToken(subject, options) {
 
@@ -182,21 +179,19 @@ class JWTGenerator {
      * 
      * Otherwise returns an object with an error status and reason.
      * 
-     * Options:
-     *  - tokenLifetime: How long the token should remain valid (luxon duration object). Overrides the default lifetime.
-     *  - record: A token record object used to verify the token. Used to debug the generator without a mongodb collection.
-     * 
      * @param {string} token - Token to validate.
      * @param {object} options - Additional options.
+     *  - **record**: A token record object used to verify the token. Used to debug the generator without a MongoDB collection.
      * @returns {object} An object describing the state of the verification, it may contain the following fields:
-     *  - success: A boolean describing whether the token was successfully verified.
-     *  - subject: If the token was verified successfully, this field will indicate the identity of the client.
-     *  - payload: If the token was verified successfully, The full payload field from the token.
-     *  - status: If the verification failed, this short string indicates what caused the failure.
+     *  - **success**: A boolean describing whether the token was successfully verified.
+     *  - **subject**: If the token was verified successfully, this field will indicate the identity of the client.
+     *      - This is the same value as the one in the payload.
+     *  - **payload**: If the token was verified successfully, The full payload field from the token.
+     *  - **status**: If the verification failed, this short string indicates what caused the failure.
      *      - noRecordError: No record source available or couldn't find a matching record.
      *      - invalidRecordError: A record was found but is missing the Key ID, Issuer or Subject values.
      *      - invalidTokenError: The token could not be verified using the key on record or has expired.
-     *  - reason: If the verification failed, this property may be included to provide a more user-friendly description of what caused the verification to fail.
+     *  - **reason**: If the verification failed, this property may be included to provide a more user-friendly description of what caused the verification to fail.
      */
     async verifyToken(token, options) {
         try {
