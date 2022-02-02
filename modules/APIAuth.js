@@ -2,7 +2,7 @@
 "use strict"
 
 const {v4: uuidv4} = require('uuid')
-const TokenGenerator = require('./JWTGenerator')
+const TokenGenerator = require('@adicitus/jwtgenerator')
 
 /**
  * Class containing Authentication/Authorization functionality of Morrigan.

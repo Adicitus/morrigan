@@ -1,7 +1,7 @@
 module.exports.version = '0.1.0.4'
 
 const { DateTime } = require('luxon')
-const TokenGenerator = require('../../../JWTGenerator')
+const TokenGenerator = require('@adicitus/jwtgenerator')
 
 
 var clientRecords = null
