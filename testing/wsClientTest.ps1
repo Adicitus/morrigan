@@ -27,6 +27,21 @@ if ("api" -notin $u.identity.functions) {
     $headers = @{ authorization="bearer $($t.token)" }
 }
 
-$c = Invoke-RestMethod -Uri "$hostname/api/client/provision" -Body '{"id": "FLORENSTR"}' -Method Post -ContentType application/json -Headers $headers
+$clientEndpoint = "$hostname/api/client"
 
-$c.token
+$clientId = [guid]::NewGuid()
+
+"Provisioning client (ID: {0})..." -f $clientId | Write-Host -ForegroundColor Cyan
+$t = Invoke-RestMethod -Uri "$clientEndpoint/provision" -Body ( @{ id = $clientId } | ConvertTo-Json ) -Method Post -ContentType application/json -Headers $headers
+$t | Write-Host
+
+"Attempting to get details for the client (ID: {0})..." -f $clientId | Write-Host -ForegroundColor Cyan
+$c = Invoke-RestMethod -Uri "$clientEndpoint/$clientId" -Method Get -Headers $headers
+$c | ConvertTo-Json -Depth 3 | Write-Host
+
+"Attempting to get details for all clients..." | Write-Host -ForegroundColor Cyan
+$c = Invoke-RestMethod -Uri "$clientEndpoint" -Method Get -Headers $headers
+$c | ConvertTo-Json -Depth 3 | Write-Host
+
+"Attempting to delete the client (ID: {0})..." -f $clientId | Write-Host -ForegroundColor Cyan
+Invoke-WebRequest -Uri "$clientEndpoint/$clientId" -Method Delete -Headers $headers | ConvertTo-Json -Depth 1 | Write-Host
