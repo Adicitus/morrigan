@@ -1,6 +1,14 @@
 {
+  "name": "@adicitus/morrigan.server",
+  "version": "0.1.0",
+  "description": "Morrigan management system server.",
+  "main": "server.js",
   "dependencies": {
     "@adicitus/jwtgenerator": "^1.0.0",
+    "@adicitus/morrigan.authentication.password": "^1.0.0",
+    "@adicitus/morrigan.server.providers.capability": "^0.1.1",
+    "@adicitus/morrigan.server.providers.client": "^1.0.4",
+    "@adicitus/morrigan.server.providers.connection": "^1.0.9",
     "body-parser": "^1.19.0",
     "express": "^4.17.1",
     "express-ws": "^4.0.0",
@@ -11,5 +19,23 @@
     "uuid": "^8.3.2",
     "winston": "^3.3.3",
     "winston-daily-rotate-file": "^4.5.2"
-  }
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "mocha --exit",
+    "start": "node server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Adicitus/morrigan.git"
+  },
+  "keywords": [
+    "morrigan"
+  ],
+  "author": "Joakim Olsson <joakim.olsson@adicitus.cloud>",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Adicitus/morrigan/issues"
+  },
+  "homepage": "https://github.com/Adicitus/morrigan#readme"
 }
