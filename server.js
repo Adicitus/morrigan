@@ -134,9 +134,12 @@ mongoClient.connect(serverSettings.database.connectionString, { useUnifiedTopolo
     log('Setting up components...')
     let promises = []
     components.forEach(c => {
-        promises.push(c.module.setup(c.route, app, environment))
+        let router = express.Router()
+        app.use(c.route, router)
+        promises.push(c.module.setup(router, environment))
     })
     await Promise.all(promises)
+    console.log(app)
     log ('Setup Finished.')
 
     server.listen(port, () => {

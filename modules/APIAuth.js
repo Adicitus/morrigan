@@ -1,3 +1,5 @@
+const express = require('express')
+
 //APIAuth.js
 "use strict"
 
@@ -458,14 +460,13 @@ class APIAuth {
     /**
      * Used to set up authentication endpoints.
      * 
-     * @param {string} path - Base path to set up the endpoints under.
-     * @param {object} app - The express app to install endpoints on.
+     * @param {object} router - The express router to install endpoints on.
      * @param {object} serverEnv - Server environment, expected to contain:
      *  + db: The database used by the server.
      *  + settings: The server settings object.
      *  + log: The log function to use.
      */
-    async setup(path, app, serverEnv) {
+    async setup(router, serverEnv) {
         
         this.serverid = serverEnv.info.id
 
@@ -473,7 +474,7 @@ class APIAuth {
 
         this.log = serverEnv.log
 
-        this.authTypes = await require('./Providers').setup(app, path, settings.auth.providers, { 'log': this.log })
+        this.authTypes = await require('./Providers').setup(router, settings.auth.providers, { 'log': this.log })
 
         this.identityRecords = serverEnv.db.collection('morrigan.identities')
         this.tokenRecords = serverEnv.db.collection('morrigan.identities.tokens')
@@ -528,7 +529,7 @@ class APIAuth {
         /**
          * Authentication endpoint.
          */
-        app.post(path, async (req, res) => {
+        router.post('/', async (req, res) => {
             
             var r = await this.authenticate(req.body)
 
@@ -562,7 +563,7 @@ class APIAuth {
         /**
          * Middleware to protect identity functions.
          */
-        app.use(`${path}/identity`, (req, res, next) => {
+        router.use(`/identity`, (req, res, next) => {
 
             if (!req.authenticated) {
                 res.status(403)
@@ -576,7 +577,7 @@ class APIAuth {
         /**
          * Add identity endpoint.
          */
-        app.post(`${path}/identity`, async (req, res) => {
+        router.post(`/identity`, async (req, res) => {
             
             if (!allowAccess(req, res, this.access.identity.create.fullname)) { return }
 
@@ -608,7 +609,7 @@ class APIAuth {
         /**
          * Get identityRecords endpoint
          */
-        app.get(`${path}/identity`, (req, res) => {
+        router.get(`/identity`, (req, res) => {
             if (!allowAccess(req, res, this.access.identity.get.all.fullname)) { return }
 
             this.identityRecords.find().toArray().then(o => {
@@ -624,7 +625,7 @@ class APIAuth {
         /**
          * Get my identityRecord endpoint
          */
-        app.get(`${path}/identity/me`, (req, res) => {
+        router.get(`/identity/me`, (req, res) => {
             this.identityRecords.find({id: req.authenticated.id}).toArray().then(o => {
                 if (o.length === 0) {
                     res.status(404)
@@ -644,7 +645,7 @@ class APIAuth {
         /**
          * Get specific identityRecord endpoint
          */
-        app.get(`${path}/identity/:identityId`, (req, res) => {
+        router.get(`/identity/:identityId`, (req, res) => {
             if (!allowAccess(req, res, this.access.identity.get.all.fullname)) { return }
 
             this.identityRecords.find({ id: req.params.identityId }).toArray().then(o => {
@@ -666,7 +667,7 @@ class APIAuth {
         /**
          * Update identity endpoint.
          */
-        app.patch(`${path}/identity/me`, async (req, res) => {
+        router.patch(`/identity/me`, async (req, res) => {
 
             if (!req.body) {
                 res.status(400)
@@ -700,7 +701,7 @@ class APIAuth {
         /**
          * Update identity endpoint.
          */
-        app.patch(`${path}/identity/:identityId`, async (req, res) => {
+        router.patch(`/identity/:identityId`, async (req, res) => {
             if (!allowAccess(req, res, this.access.identity.update.all.fullname)) { return }
 
             if (!req.body) {
@@ -729,7 +730,7 @@ class APIAuth {
         /**
          * Remove identity endpoint
          */
-        app.delete(`${path}/identity/:identityId`, async (req, res) => {
+        router.delete(`/identity/:identityId`, async (req, res) => {
             if (!allowAccess(req, res, this.access.identity.delete.all.fullname)) { return }
 
             let r = await this.removeIdentity(req.params.identityId)

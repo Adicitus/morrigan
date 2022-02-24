@@ -39,15 +39,14 @@ class APICore {
     /**
      * Used to set up core functionality.
      * 
-     * @param {string} path - Base path to set up the endpoints under.
-     * @param {object} app - The express app to set up endpoints on.
+     * @param {object} router - The express router to set up endpoints on.
      * @param {object} serverEnv - Server environment, expected to contain:
      *  + settings: The server settings object.
      *  + log: The log function to use.
      *  + db: The database used by the server.
      *  + info: Server info.
      */
-    async setup(path, app, serverEnv) {
+    async setup(router, serverEnv) {
 
         let settings = serverEnv.settings
 
@@ -60,7 +59,7 @@ class APICore {
             serverInfo: serverEnv.info
         }
 
-        app.use(path, (req, res, next) => {
+        router.use('/', (req, res, next) => {
             
             if (this._verifyReqAuthentication(req)) {
                 req.core = this.coreEnv
@@ -73,7 +72,7 @@ class APICore {
             }
         })
 
-        this.coreEnv.providers = await require('./Providers').setup(app, path, settings.api.providers, this.coreEnv)
+        this.coreEnv.providers = await require('./Providers').setup(router, settings.api.providers, this.coreEnv)
 
     }
 

@@ -5,28 +5,31 @@ class Providers {
 
     /**
      * Enumerates and loads providers specified by providersList, adding any exported endpoints to
-     * the provided app object.
+     * the provided router object.
      * 
      * Providers should be installed using npm.
      * 
-     * A provider should export a 'name' key and may export a 'endpoints' key.
+     * A provider should export a 'name' key, otherwise it will be dropped. The name should contain
+     * only alphanumeric characters, '-', '_' and '.'.
+     * 
+     * May export a 'endpoints' key and a 'version' key. If no 'version' key is exported, then
+     * the package version will be used.
      * 
      * The 'name' key is used to register the provider internally. If 2 or more providers specify
      * the same name, the provider specified last in the list will be used.
      * 
      * Endpoints should be exported as an array of objects with the following fields:
-     *  - route: A path to be appended to the "uriRoot" (uriRoot + providerName + route).
+     *  - route: A path to be appended to the (providerName + route).
      *  - method: A HTTP method.
      *  - handler: A function to be registered as handler fo the endpoint.
      * 
-     * @param app Express app to register endpoints on.
-     * @param uriRoot The root path that provider endpoints should be registered under.
+     * @param router Express router to register endpoints on.
      * @param providersList Array of module names that should be loaded as providers.
      * @param environment Core environment
      * @param providers Prepopulated providers list, this object will be returned by the function. This parameter can be safely omitted, in which case a new object will be created.
      * @returns An object mapping provider names to loaded provider modules.
      */
-    static async setup (app, uriRoot, providersList, environment, providers) {
+    static async setup (router, providersList, environment, providers) {
 
         const log = environment.log
 
@@ -46,6 +49,10 @@ class Providers {
                 let provider = require(providerName)
                 if (!provider.name) {
                     log('Provider does not specify a name, skipping...')
+                    return
+                }
+                if (! (/[a-zA-Z0-9\-_.]+/.test(provider.name)) ) {
+                    log(`Provider name '${provider.name}' is invalid (should only contain alphanumeric characters, -, _ and .), skipping...`)
                     return
                 }
                 if (!provider.version) {
@@ -95,11 +102,11 @@ class Providers {
                         continue
                     }
 
-                    let route = `${uriRoot}/${namespace}${endpoint.route}`
+                    let route = `/${namespace}${endpoint.route}`
 
                     log(`${endpoint.method.toUpperCase().padStart(7, ' ')} ${route}`)
 
-                    app[endpoint.method](route, endpoint.handler)
+                    router[endpoint.method](route, endpoint.handler)
                 }
             }
         }
