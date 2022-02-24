@@ -11,8 +11,7 @@ module.exports.build = (stateDirPath) => {
         stateDirPath = `${__dirname}/state`
     }
 
-    let versionFilePath = `${__dirname}/version`
-    info.version = fs.readFileSync(versionFilePath, { encoding: 'utf8' })
+    info.version = require(__dirname + '/package.json').version
     info.serverRoot = __dirname
 
     info.startTime = DateTime.now().toISO()

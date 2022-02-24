@@ -26,6 +26,7 @@ log('Finished setting up logging.')
 log(`Reading server state (looking in '${serverSettings.stateDir}')...`)
 const serverInfo = require('./server.info').build(serverSettings.stateDir)
 log('Finished reading server state.')
+log (`Running Morrigan server version ${serverInfo.version}.`)
 
 const auth = require('./modules/APIAuth')
 

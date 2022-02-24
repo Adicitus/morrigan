@@ -20,7 +20,6 @@
     "winston": "^3.3.3",
     "winston-daily-rotate-file": "^4.5.2"
   },
-  "devDependencies": {},
   "scripts": {
     "test": "mocha --exit",
     "start": "node server.js"
