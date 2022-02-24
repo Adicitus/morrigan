@@ -72,23 +72,8 @@ class APICore {
                 return
             }
         })
-        
 
-        // Handlers should be defined as modules and loaded from the 'providers' directory.
-        // Provider modules should export a 'version' string and a 'messages' object. Each key on the 'messages' object should
-        // define a handler that can accept the message object received from the server, a connection object and a 'record'
-        // object containing metadata about the connection (including the clientId of the client associated with the connection).
-        let providerPaths = [`${__dirname}/providers/core`]
-        if (settings.api && settings.api.providerPaths) {
-            let a = settings.api.providerPaths
-            if (Array.isArray(a)) {
-                providerPaths = providerPaths.concat(a)
-            } else {
-                providerPaths.push(a)
-            }
-        }
-
-        this.coreEnv.providers = await require('./Providers').setup(app, path, providerPaths, this.coreEnv)
+        this.coreEnv.providers = await require('./Providers').setup(app, path, settings.api.providers, this.coreEnv)
 
     }
 

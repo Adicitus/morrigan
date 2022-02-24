@@ -59,10 +59,6 @@ class APIAuth {
      *  + Commit: Given the authentication details for an identity,
      *      should perform any tasks needed to enable verification using
      *      the  "authenticate" function.
-     * 
-     * By default the APIAuth will look for authentications providers under
-     * `{morrigan_root}/modules/providers/auth`. Additional paths can be set
-     * in `server.settings.json` (`auth.providerPaths`)
      */
      authTypes = null
 
@@ -477,17 +473,7 @@ class APIAuth {
 
         this.log = serverEnv.log
 
-        let providerPaths = [`${__dirname}/providers/auth`]
-        if (settings.auth && settings.auth.providerPaths) {
-            let a = settings.auth.providerPaths
-            if (Array.isArray(a)) {
-                providerPaths = providerPaths.concat(a)
-            } else {
-                providerPaths.push(a)
-            }
-        }
-
-        this.authTypes = await require('./Providers').setup(app, path, providerPaths, { 'log': this.log })
+        this.authTypes = await require('./Providers').setup(app, path, settings.auth.providers, { 'log': this.log })
 
         this.identityRecords = serverEnv.db.collection('morrigan.identities')
         this.tokenRecords = serverEnv.db.collection('morrigan.identities.tokens')

@@ -23,15 +23,17 @@ module.exports = {
         logDir: "/morrigan.server/logs"
     },
 
-    /*
     api: {
-        // Additional paths to look for providers at:
-        providerPaths: ['/morrigan/providers']
+        providers: [
+            '@adicitus/morrigan.server.providers.connection',
+            '@adicitus/morrigan.server.providers.client',
+            '@adicitus/morrigan.server.providers.capability'
+        ]
     },
 
     auth: {
-        // Additional paths to look for authentication providers at:
-        providerPaths: ['/morrigan/auth/providers']
+        providers: [
+            '@adicitus/morrigan.authentication.password'
+        ]
     }
-    */
 }

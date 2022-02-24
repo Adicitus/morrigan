@@ -1,5 +1,4 @@
-
-const fs = require('fs')
+const { info } = require("winston")
 
 /**
  * Class containing logic for loading providers and adding them to Morrigan.
@@ -7,11 +6,15 @@ const fs = require('fs')
 class Providers {
 
     /**
-     * Enumerates and loads providers from the providersDir directory, adding any exported endpoints to
+     * Enumerates and loads providers specified by providersList, adding any exported endpoints to
      * the provided app object.
      * 
-     * Each provider should be defined as a module in a file called module.js located in a subfolder with the
-     * provider's name under the "providersDir" directory.
+     * Providers should be installed using npm.
+     * 
+     * A provider should export a 'name' key and may export a 'endpoints' key.
+     * 
+     * The 'name' key is used to register the provider internally. If 2 or more providers specify
+     * the same name, the provider specified last in the list will be used.
      * 
      * Endpoints should be exported as an array of objects with the following fields:
      *  - route: A path to be appended to the "uriRoot" (uriRoot + providerName + route).
@@ -20,53 +23,37 @@ class Providers {
      * 
      * @param app Express app to register endpoints on.
      * @param uriRoot The root path that provider endpoints should be registered under.
-     * @param providersDir The path to the directory containing provider definitions. This parameter can accept and array of paths to load from multiple locations.
+     * @param providersList Array of module names that should be loaded as providers.
      * @param environment Core environment
      * @param providers Prepopulated providers list, this object will be returned by the function. This parameter can be safely omitted, in which case a new object will be created.
      * @returns An object mapping provider names to loaded provider modules.
      */
-    static async setup (app, uriRoot, providersDir, environment, providers) {
+    static async setup (app, uriRoot, providersList, environment, providers) {
 
         const log = environment.log
 
-        log(`Loading providers under '${uriRoot}'...`)
+        log(`Loading providers...`)
 
-        if (!Array.isArray(providersDir)) {
-            providersDir = [providersDir]
+        if (!Array.isArray(providersList)) {
+            providersList = [providersList]
         }
 
         if (!providers) {
             providers = {}
         }
 
-
-        for (var dirI in providersDir) {
-            let dir = providersDir[dirI]
-            if (!fs.existsSync(dir)) {
-                log(`Invalid provider directory path provided: ${dir}`)
-                continue
-            }
-
-            let providerNames = fs.readdirSync(dir)
-            if (!providerNames) {
-                log(`Failed to read directory: ${dir}`)
-                continue
-            }
-
-            for (var i in providerNames) {
-                let name = providerNames[i]
-                let providerModulePath = `${dir}/${name}/module.js`
-                if (fs.existsSync(providerModulePath)) {
-                    log(`Loading provider '${name}' (${providerModulePath})...`)
-                    try {
-                        let provider = require(providerModulePath)
-                        providers[name] = provider
-                    } catch(e) {
-                        log(`Failed to read provider module '${providerModulePath}': ${e}`)
-                    }
+        providersList.forEach(providerName => {
+            try {
+                log(`Loading provider '${providerName}'...`)
+                let provider = require(providerName)
+                if (!provider.name) {
+                    log('Provider does not specify a name')
                 }
+                providers[provider.name] = provider
+            } catch (e) {
+                log(`Failed to load provider module '${providerName}': ${e}`)
             }
-        }
+        })
 
         for (const p in providers) {
             let provider = providers[p]
@@ -109,6 +96,8 @@ class Providers {
                 }
             }
         }
+
+        console.log(providers)
 
         return providers
     }
