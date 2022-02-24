@@ -1,5 +1,3 @@
-const { info } = require("winston")
-
 /**
  * Class containing logic for loading providers and adding them to Morrigan.
  */
@@ -47,8 +45,17 @@ class Providers {
                 log(`Loading provider '${providerName}'...`)
                 let provider = require(providerName)
                 if (!provider.name) {
-                    log('Provider does not specify a name')
+                    log('Provider does not specify a name, skipping...')
+                    return
                 }
+                if (!provider.version) {
+                    let mainPath = require.resolve(providerName)
+                    let modulesPath = require.resolve.paths(providerName).find(v => { let rx = new RegExp('^' + v.replaceAll('\\', '\\\\')); return rx.test(mainPath) } )
+                    provider.version = require(`${modulesPath}/${providerName}/package.json`).version
+                }
+
+                log(`Registering provider '${providerName}' v${provider.version} as '${provider.name}'`)
+
                 providers[provider.name] = provider
             } catch (e) {
                 log(`Failed to load provider module '${providerName}': ${e}`)
