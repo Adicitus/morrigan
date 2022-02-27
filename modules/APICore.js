@@ -72,7 +72,7 @@ class APICore {
             }
         })
 
-        this.coreEnv.providers = await require('./Providers').setup(router, settings.api.providers, this.coreEnv)
+        this.coreEnv.providers = await require('@adicitus/morrigan.utils.providers').setup(router, settings.api.providers, this.coreEnv)
 
     }
 

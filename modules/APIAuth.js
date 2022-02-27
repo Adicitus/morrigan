@@ -474,7 +474,7 @@ class APIAuth {
 
         this.log = serverEnv.log
 
-        this.authTypes = await require('./Providers').setup(router, settings.auth.providers, { 'log': this.log })
+        this.authTypes = await require('@adicitus/morrigan.utils.providers').setup(router, settings.auth.providers, { 'log': this.log })
 
         this.identityRecords = serverEnv.db.collection('morrigan.identities')
         this.tokenRecords = serverEnv.db.collection('morrigan.identities.tokens')

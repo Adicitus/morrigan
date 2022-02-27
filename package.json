@@ -9,6 +9,7 @@
     "@adicitus/morrigan.server.providers.capability": "^0.1.1",
     "@adicitus/morrigan.server.providers.client": "^1.0.4",
     "@adicitus/morrigan.server.providers.connection": "^1.0.9",
+    "@adicitus/morrigan.utils.providers": "^1.0.0",
     "body-parser": "^1.19.0",
     "express": "^4.17.1",
     "express-ws": "^4.0.0",
