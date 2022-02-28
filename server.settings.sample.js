@@ -23,17 +23,23 @@ module.exports = {
         logDir: "/morrigan.server/logs"
     },
 
-    api: {
-        providers: [
-            '@adicitus/morrigan.server.providers.connection',
-            '@adicitus/morrigan.server.providers.client',
-            '@adicitus/morrigan.server.providers.capability'
-        ]
-    },
+    components: {
+        api: {
+            module: './modules/APICore',
 
-    auth: {
-        providers: [
-            '@adicitus/morrigan.authentication.password'
-        ]
+            providers: [
+                '@adicitus/morrigan.server.providers.connection',
+                '@adicitus/morrigan.server.providers.client',
+                '@adicitus/morrigan.server.providers.capability'
+            ]
+        },
+
+        auth: {
+            module: './modules/APIAuth',
+
+            providers: [
+                '@adicitus/morrigan.authentication.password'
+            ]
+        }
     }
 }

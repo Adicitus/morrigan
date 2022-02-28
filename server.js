@@ -26,9 +26,7 @@ log('Finished setting up logging.')
 log(`Reading server state (looking in '${serverSettings.stateDir}')...`)
 const serverInfo = require('./server.info').build(serverSettings.stateDir)
 log('Finished reading server state.')
-log (`Running Morrigan server version ${serverInfo.version}.`)
-
-const auth = require('./modules/APIAuth')
+log(`Running Morrigan server version ${serverInfo.version}.`)
 
 /**
  * Use the components array to specify which components to use and which order to configure them in.
@@ -37,10 +35,32 @@ const auth = require('./modules/APIAuth')
  * Loading the components here will prevent the server from starting in case there are any issues
  * with loading the modules (this is the indended behavior: fail fast).
  */
-const components = [
-    {module: auth, route: '/auth'},
-    {module: require('./modules/APICore'), route: '/api'}
-]
+const components = []
+
+let componentNames = Object.keys(serverSettings.components)
+
+componentNames.forEach(componentName => {
+    
+    let componentDef = serverSettings.components[componentName]
+    if (!componentDef.module) {
+        log(`No module specified for component '${componentName}', skipping it...`)
+        return
+    }
+
+    let module = null
+
+    try {
+        module = require(componentDef.module)
+    } catch (e) {
+        log(`Unabled to load the module '${componentDef.module}' defined by component '${componentName}':`)
+        log(e)
+        return
+    }
+
+    log(`Registered component module '${componentDef.module}' as '${componentName}'`)
+
+    components.push({name: componentName, module: module, route: `/${componentName}`, definition: componentDef })
+})
 
 var server = null
 if (serverSettings.http) {
@@ -110,9 +130,14 @@ expressws(app, server)
 // All request bodies should be treated as 'application.json':
 app.use(bodyParser.json())
 
-// Add middleware to verify authentication and make authorization details
-// available to downstreams handlers:
-app.use(auth.getVerifyMW())
+// Add middleware from components:
+components.forEach(component => {
+    let m = component.module
+    if (m.getMiddleware) {
+        log(`Adding middleware from '${component.name}'...`)
+        app.use(m.getMiddleware())
+    }
+})
 
 
 // Establish connection to MongoDB:
@@ -136,10 +161,9 @@ mongoClient.connect(serverSettings.database.connectionString, { useUnifiedTopolo
     components.forEach(c => {
         let router = express.Router()
         app.use(c.route, router)
-        promises.push(c.module.setup(router, environment))
+        promises.push(c.module.setup(c.name, c.definition, router, environment))
     })
     await Promise.all(promises)
-    console.log(app)
     log ('Setup Finished.')
 
     server.listen(port, () => {

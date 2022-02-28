@@ -460,21 +460,25 @@ class APIAuth {
     /**
      * Used to set up authentication endpoints.
      * 
-     * @param {object} router - The express router to install endpoints on.
-     * @param {object} serverEnv - Server environment, expected to contain:
+     * @param {string} name Name that this file will registered as.
+     * @param {object} definition Object containing the definition for this component, expected to contain a list of providers to load.
+     * @param {object} router The express router to install endpoints on.
+     * @param {object} serverEnv Server environment, expected to contain:
      *  + db: The database used by the server.
      *  + settings: The server settings object.
      *  + log: The log function to use.
      */
-    async setup(router, serverEnv) {
+    async setup(name, defintion, router, serverEnv) {
         
+        let providers = defintion.providers
+
         this.serverid = serverEnv.info.id
 
         let settings = serverEnv.settings
 
         this.log = serverEnv.log
 
-        this.authTypes = await require('@adicitus/morrigan.utils.providers').setup(router, settings.auth.providers, { 'log': this.log })
+        this.authTypes = await require('@adicitus/morrigan.utils.providers').setup(router, providers, { 'log': this.log })
 
         this.identityRecords = serverEnv.db.collection('morrigan.identities')
         this.tokenRecords = serverEnv.db.collection('morrigan.identities.tokens')
@@ -760,7 +764,7 @@ class APIAuth {
      * 
      * @returns The verification middleware.
      */
-    getVerifyMW() {
+    getMiddleware() {
         /**
          * Define self here to create a refernce to this object, which makes it available
          * in the returned closure (as 'this' will be different).

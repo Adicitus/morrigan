@@ -39,6 +39,8 @@ class APICore {
     /**
      * Used to set up core functionality.
      * 
+     * @param {string} name - Name that this component will registered under.
+     * @param {object} definition Object containing the definition for this component, expected to contain a list of providers to load.
      * @param {object} router - The express router to set up endpoints on.
      * @param {object} serverEnv - Server environment, expected to contain:
      *  + settings: The server settings object.
@@ -46,7 +48,9 @@ class APICore {
      *  + db: The database used by the server.
      *  + info: Server info.
      */
-    async setup(router, serverEnv) {
+    async setup(name, definition, router, serverEnv) {
+
+        let providers = definition.providers
 
         let settings = serverEnv.settings
 
@@ -72,7 +76,7 @@ class APICore {
             }
         })
 
-        this.coreEnv.providers = await require('@adicitus/morrigan.utils.providers').setup(router, settings.api.providers, this.coreEnv)
+        this.coreEnv.providers = await require('@adicitus/morrigan.utils.providers').setup(router, providers, this.coreEnv)
 
     }
 
