@@ -35,7 +35,7 @@ module.exports = {
         },
 
         auth: {
-            module: './modules/APIAuth',
+            module: '@adicitus/morrigan.components.authentication',
 
             providers: [
                 '@adicitus/morrigan.authentication.password'
