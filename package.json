@@ -7,6 +7,7 @@
     "@adicitus/jwtgenerator": "^1.0.0",
     "@adicitus/morrigan.authentication.password": "^1.0.0",
     "@adicitus/morrigan.components.authentication": "^1.0.0",
+    "@adicitus/morrigan.components.core": "^1.0.0",
     "@adicitus/morrigan.server.providers.capability": "^0.1.1",
     "@adicitus/morrigan.server.providers.client": "^1.0.4",
     "@adicitus/morrigan.server.providers.connection": "^1.0.9",

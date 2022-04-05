@@ -25,7 +25,7 @@ module.exports = {
 
     components: {
         api: {
-            module: './modules/APICore',
+            module: '@adicitus/morrigan.components.core',
 
             providers: [
                 '@adicitus/morrigan.server.providers.connection',
