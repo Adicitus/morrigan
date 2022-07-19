@@ -55,7 +55,7 @@ module.exports = {
      * - providers: An array of names for modules that the component should use as providers. This key is not required, but is used by both built-in components.
      */
     components: {
-        api: {
+        core: {
             module: '@adicitus/morrigan.components.core',
 
             providers: [

@@ -80,7 +80,7 @@ class Morrigan {
         
             log(`Registered component module '${componentSpec.module}' as '${componentName}'`)
         
-            this.components.push({name: componentName, module: module, route: `/${componentName}`, specification: componentSpec })
+            this.components.push({name: componentName, module: module, route: `/api/${componentName}`, specification: componentSpec })
         })
 
         log(`Reading server state (looking in '${serverSettings.stateDir}')...`)

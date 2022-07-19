@@ -14,7 +14,7 @@ $body = @{
     name = $user
     password = $pass
 } | ConvertTo-Json
-$token = Invoke-RestMethod -Uri "$($hostname)/auth" -Body $body -Method Post -ContentType application/json
+$token = Invoke-RestMethod -Uri "$($hostname)/api/auth" -Body $body -Method Post -ContentType application/json
 $token | ConvertTo-Json -Depth 10 | Write-Host
 
 "Building headers..." | Write-Host -ForegroundColor Cyan
@@ -22,10 +22,10 @@ $headers = @{ authorization = "bearer $($token.token)" }
 $headers | ConvertTo-Json -Depth 10 | Write-Host
 
 "Getting current users..." | Write-Host -ForegroundColor Cyan
-Invoke-RestMethod -Uri "$($hostname)/auth/identity/" -Method get -Headers $headers | ConvertTo-Json -Depth 10 | Write-Host
+Invoke-RestMethod -Uri "$($hostname)/api/auth/identity/" -Method get -Headers $headers | ConvertTo-Json -Depth 10 | Write-Host
 
 "Adding new user: $($testUsername)..." | Write-Host -ForegroundColor Cyan
-$newUser = Invoke-RestMethod -Uri "$($hostname)/auth/identity" -Method Post -Body (@{
+$newUser = Invoke-RestMethod -Uri "$($hostname)/api/auth/identity" -Method Post -Body (@{
     name = $testUsername
     auth = @{
         type = "password"
@@ -37,7 +37,7 @@ $newUser | ConvertTo-Json -Depth 10 | Write-Host
 
 $newUserId = $newUSer.identity.id
 
-$userURI = "$($hostname)/auth/identity/$($newUserId)"
+$userURI = "$($hostname)/api/auth/identity/$($newUserId)"
 
 $userURI | Write-Host
 
@@ -54,14 +54,14 @@ Invoke-RestMethod -Uri $userURI -Method Patch -Body (@{
 } | ConvertTo-Json ) -ContentType application/json -Headers $headers | ConvertTo-Json -Depth 10 | write-Host
 
 "Getting authentication token for $($testUsername)..." | Write-Host -ForegroundColor Cyan
-$token2 = Invoke-RestMethod -Uri "$($hostname)/auth" -Body (@{ name = $testUsername; password = $testPassword2 } | ConvertTo-Json -Depth 10) -Method Post -ContentType application/json
+$token2 = Invoke-RestMethod -Uri "$($hostname)/api/auth" -Body (@{ name = $testUsername; password = $testPassword2 } | ConvertTo-Json -Depth 10) -Method Post -ContentType application/json
 $token2 | ConvertTo-Json -Depth 10 | Write-Host
 
-"Getting identity for $($testUsername) using auth/identity/me endpoint..." | Write-Host -ForegroundColor Cyan
-Invoke-RestMethod -Uri "$($hostname)/auth/identity/me" -Method Get -Headers @{ authorization = "bearer $($token2.token)" } | ConvertTo-Json -Depth 10 | Write-Host
+"Getting identity for $($testUsername) using /api/auth/identity/me endpoint..." | Write-Host -ForegroundColor Cyan
+Invoke-RestMethod -Uri "$($hostname)/api/auth/identity/me" -Method Get -Headers @{ authorization = "bearer $($token2.token)" } | ConvertTo-Json -Depth 10 | Write-Host
 
 "Removing $($testUsername)..." | Write-Host -ForegroundColor Cyan
 Invoke-RestMethod -Uri $userURI -Method Delete -Headers $headers | ConvertTo-Json -Depth 10 | Write-Host
 
 "Getting new user list..." | Write-Host -ForegroundColor Cyan
-Invoke-RestMethod -Uri "$($hostname)/auth/identity/" -Method get -Headers $headers | ConvertTo-Json -Depth 10 | Write-Host
+Invoke-RestMethod -Uri "$($hostname)/api/auth/identity/" -Method get -Headers $headers | ConvertTo-Json -Depth 10 | Write-Host
