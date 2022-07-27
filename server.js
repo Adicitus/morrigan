@@ -211,6 +211,17 @@ class Morrigan {
             await Promise.all(promises)
             log ('Setup Finished.')
 
+            app.get('/api-docs', (req, res) => {
+
+                let routes = this._buildApiDoc()
+
+                res.setHeader('Content-Type', 'application/json')
+                res.end(JSON.stringify(routes))
+
+                // TODO: Publish OpenAPI documentation on /api-docs with swagger-ui-express
+                //this.app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(openapiSpec))
+            })
+
             server.listen(port, () => {
                 log(`Listening on port ${port}.`)
             })
@@ -291,6 +302,159 @@ class Morrigan {
         await this._instances.replaceOne(selector, record)
         l('Bye!')
         process.exit()
+    }
+
+    _buildApiDoc() {
+        
+        let doc = {
+            openapi: '3.0.0',
+            info: {
+                title: `Morrigan API (${this.serverInfo.id})`,
+                description: `Morrigan management server\\nVersion: ${this.serverInfo.version}\\nID: ${this.serverInfo.id}`,
+                version: this.serverInfo.version
+            },
+            paths: {}
+        }
+        
+        /*** Keys to extract from module's .openapi key ***/
+        let openapiKeys = [
+            { name: 'components', type: 'object', merge: (sourceObject, destinationObject) => {
+                /**
+                 * The 'components' key of the OpenAPI specification contains a set of mappings, so
+                 * we expect the value for all keys to be of type 'object'.
+                 */
+                let componentsKeys = [
+                    'schemas',
+                    'responses',
+                    'parameters',
+                    'examples',
+                    'requestBodies',
+                    'headers',
+                    'securitySchemas',
+                    'links',
+                    'callbacks'
+                ]
+
+                componentsKeys.forEach(componentKey => {
+                    let sourceMap = sourceObject[componentKey]
+                    if (!sourceMap) {
+                        console.log(`Did not find key '${componentKey}'.`)
+                        return
+                    }
+
+                    if (typeof sourceMap !== 'object') {
+                        console.log(`Found key '${componentKey}', but it is not the expected type (expected 'object', found '${typeof sourceMap}')`)
+                        return
+                    }
+
+                    if (!destinationObject[componentKey]) {
+                        destinationObject[componentKey] = {}
+                    }
+
+                    Object.keys(sourceMap).forEach(k => {
+                        destinationObject[componentKey][k] = sourceMap[k]
+                    })
+                })
+            } },
+            { name: 'security', type: 'array', merge: (sourceArray, destinationArray) => {
+                sourceArray.forEach(v => destinationArray.push(v))
+            } },
+            { name: 'tags', type: 'array', merge: (sourceArray, destinationArray) => {
+                sourceArray.forEach(v => destinationArray.push(v))
+            } }
+        ]
+
+        /*** Include spec exported by modules ***/
+        this.components.forEach(component => {
+
+            console.log(component)
+
+            let openapi = component.module.openapi
+
+            if (!openapi) {
+                console.log(`No .openapi key exported by the '${component.name}'`)
+                return
+            }
+
+            openapi.forEach(spec => {
+
+                openapiKeys.forEach(key => {
+                    let source = spec[key.name]
+                    if (!source) {
+                        console.log(`Did not find key '${key.name}' on .openapi declaration from '${component.name}'.`)
+                        return
+                    }
+
+                    if (typeof source !== key.type) {
+                        console.log(`Found key '${key.name}' on .openapi declaration from '${component.name}', but it does not match the expected type (expected '${key.type}' found '${typeof source}')`)
+                        return
+                    }
+
+                    let destination = doc[key.name]
+
+                    if (destination === undefined) {
+                        switch(key.type) {
+                            case 'array':
+                                destination = []
+                                break
+                            case 'object':
+                                destination = {}
+                                break
+                        }
+
+                        doc[key.name] = destination
+                    }
+
+                    key.merge(source, destination)
+                })
+            })
+        })
+
+        /*** Include spec from registered paths ***/
+
+        // Check all middleware on app:
+        this.app._router.stack.forEach(mw => {
+            if (mw.name !== 'router') {
+                // Ignore this mw if it's not a router
+                return 
+            }
+
+            // Check each handler in the router's stack:
+            mw.handle.stack.forEach(handler => {
+                if (!handler.route) {
+                    // We only handle routers with routes
+                    return
+                }
+
+                let route = handler.route
+
+                // Check each layer on the routes' stack.
+                route.stack.forEach(layer => {
+                    let spec = doc.paths[route.path] || {}
+                    let m = layer.method
+                    if (m) {
+                        let openapi = layer.handle['openapi'] || {}
+                        if (openapi[m]) {
+                            // Use the openapi spec declared on the handler: 
+                            spec[m] = openapi[m]
+                        } else {
+                            // Default value for unspecified openapi spec:
+                            spec[m] = {
+                                responses: {
+                                    default: {
+                                        description: "Unknown: no .openapi object specified on the handler function."
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    doc.paths[route.path] = spec
+                })
+            })
+        })
+
+        return doc
     }
 }
 
