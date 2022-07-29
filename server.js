@@ -13,7 +13,7 @@ const swaggerUi = require('swagger-ui-express')
 class Morrigan {
     settings = null
     log = null
-    port = 1337
+    port = 3000
     app = null
     serverInfo = null
     server = null

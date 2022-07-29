@@ -11,6 +11,21 @@ The goal of Morrigan is to create a platform-independent, scalable and extendabl
 
 **Extendability:** The capabilities of the server and client sides of the system can be extended using components and providers.
 
+## Installation
+
+Via NPM:
+```
+npm install morrigan.server
+```
+
+## Configuration
+The Morrigan constructor expects a settings object, with at least the following keys:
+- database: An object with connection details for the MongoDB instance to use.
+- components: Object specifying the components to use and their settings.
+
+See server.settings.sample.js for more information.
+
+
 ## Components & Providers
 Morrigan uses Components to define server functionality, and each component is then expetcted to load providers that further define it's functionality.
 

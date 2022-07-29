@@ -15,6 +15,8 @@ module.exports = {
      * - secure: A boolean to indicate whether the server should use HTTPS.
      * - certPath: Iff secure is true, this key specifies a location where the server can expect to to find the x509 certificate for the server.
      * - keyPath: Iff secure is true, this key specifies the location where the server can expect to find the private key corresponding to the certificate.
+     * 
+     * This key is not required and can be safely omitted. This will create a HTTP server that listens on port 3000.
      */
     http: {
         port: 443,
@@ -28,7 +30,9 @@ module.exports = {
      * 
      * Accepts the following options:
      * - connectionString: A connection string used to establish connection to the MongoDB server.
-     * - dbname: The name the database to use. 
+     * - dbname: The name the database to use.
+     * 
+     * This setting is required and has no defaults.
      */
     database: {
         connectionString: "mongodb://127.0.0.1:27017",
@@ -39,8 +43,8 @@ module.exports = {
      * settings for the built-in logger module.
      * 
      * Accepts the following options:
-     * - console: boolean to determine where if the logged messages should also be printed to the console.
-     * - logDir: The directory on the local machine where log files should be written. 
+     * - console: boolean to determine where if the logged messages should also be printed to the console (default: true).
+     * - logDir: The directory on the local machine where log files should be written (default: '/morrigan.server/logs'). 
      */
     logger: {
         console: true,
@@ -53,6 +57,8 @@ module.exports = {
      * Each key in the component specifications object should contain a component specification, consisting of the following keys:
      * - module: Name of a module to load. This key is required.
      * - providers: An array of names for modules that the component should use as providers. This key is not required, but is used by both built-in components.
+     * 
+     * This setting is required and has no defaults.
      */
     components: {
         core: {
