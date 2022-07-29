@@ -8,10 +8,11 @@ const morgan = require('morgan')
  */
 class Logger {
 
-    #consoleLogger = null
-    #engine=null
+    _consoleLogger = null
+    _engine=null
+    _logDir='/morrigan.server/logs'
 
-    #log = null
+    log = null
 
     constructor() {
         const logFormat = winston.format.printf(({level, message, timestamp}) => {
@@ -19,14 +20,14 @@ class Logger {
         })
 
         // Default transport:
-        this.consoleLogger = new winston.transports.Console()
+        this._consoleLogger = new winston.transports.Console()
 
-        this.engine = winston.createLogger({
+        this._engine = winston.createLogger({
             format: winston.format.combine(
                 winston.format.timestamp(),
                 logFormat
             ),
-            transports: [ this.consoleLogger ]
+            transports: [ this._consoleLogger ]
         })
 
         this.log = this.getLog()
@@ -48,10 +49,10 @@ class Logger {
         }
 
         if (settings.console !== undefined && settings.console === false) {
-            this.engine.remove(this.consoleLogger)
+            this._engine.remove(this._consoleLogger)
         } else {
-            if (!this.engine.transports.includes(this.consoleLogger)) {
-                this.engine.add(this.consoleLogger)
+            if (!this._engine.transports.includes(this._consoleLogger)) {
+                this._engine.add(this._consoleLogger)
             }
         }
 
@@ -59,13 +60,13 @@ class Logger {
 
             if(!fs.existsSync(settings.logDir)) {
 
-                this.engine.log('info', `Log dir (${settings.logDir}) does not exist, trying to create it...`)
+                this._engine.log('info', `Log dir (${settings.logDir}) does not exist, trying to create it...`)
 
                 try {
                     fs.mkdirSync(settings.logDir, {recursive: true})
                 } catch(e) {
-                    this.engine.log('error', `Failed to create log directory.`)
-                    this.engine.log('error', JSON.stringify(e))
+                    this._engine.log('error', `Failed to create log directory.`)
+                    this._engine.log('error', JSON.stringify(e))
                     return
                 }
             }
@@ -73,23 +74,23 @@ class Logger {
             try {
                 fs.accessSync(settings.logDir, fs.constants.W_OK | fs.constants.R_OK)
             } catch(e) {
-                this.engine.log('error', `No read/write access to log directory (${settings.logDir})`)
-                this.engine.log('error', JSON.stringify(e))
+                this._engine.log('error', `No read/write access to log directory (${settings.logDir})`)
+                this._engine.log('error', JSON.stringify(e))
                 return
             }
 
-            this.engine.log('info', `Writing log files to '${fs.realpathSync(settings.logDir)}'.`)
+            this._logDir = settings.logDir
 
             let transport = new winston.transports.DailyRotateFile({
                 filename: 'morrigan-%DATE%.log',
                 datePattern: 'YYYY-MM-DD-HH',
-                dirname: settings.logDir,
+                dirname: this._logDir,
                 zippedArchive: true,
                 maxSize: '20m',
                 maxFiles: '14d'
             })
 
-            this.engine.add(transport)
+            this._engine.add(transport)
         }
 
         // Setup request logging:
@@ -103,6 +104,8 @@ class Logger {
                 }
             )
         )
+        console.log(this._logDir)
+        this._engine.log('info', `Writing log files to '${fs.realpathSync(this._logDir)}'.`)
     }
 
     /**
@@ -111,7 +114,7 @@ class Logger {
      */
     getLog() {
         // Define engine here to make it accessible to the logging function.
-        let engine = this.engine
+        let engine = this._engine
         return (msg, level) => {
             if (!level) {
                 level = 'info'
