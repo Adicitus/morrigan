@@ -5,6 +5,7 @@ const express = require('express')
 const expressws = require('express-ws')
 const bodyParser = require('body-parser')
 const Logger =  require('./modules/Logger')
+const swaggerUi = require('swagger-ui-express')
 
 /**
  * Main class of Morrigan administration system.
@@ -206,6 +207,7 @@ class Morrigan {
             components.forEach(c => {
                 let router = express.Router()
                 app.use(c.route, router)
+                router._morriganRootPath = c.route
                 promises.push(c.module.setup(c.name, c.specification, router, environment))
             })
             await Promise.all(promises)
@@ -217,10 +219,13 @@ class Morrigan {
 
                 res.setHeader('Content-Type', 'application/json')
                 res.end(JSON.stringify(routes))
-
-                // TODO: Publish OpenAPI documentation on /api-docs with swagger-ui-express
-                //this.app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(openapiSpec))
             })
+
+            app.use('/api-docs/view', swaggerUi.serve, swaggerUi.setup(null, {
+                swaggerOptions: {
+                    url: '/api-docs'
+                }
+            }))
 
             server.listen(port, () => {
                 log(`Listening on port ${port}.`)
@@ -309,8 +314,10 @@ class Morrigan {
         let doc = {
             openapi: '3.0.0',
             info: {
-                title: `Morrigan API (${this.serverInfo.id})`,
-                description: `Morrigan management server\\nVersion: ${this.serverInfo.version}\\nID: ${this.serverInfo.id}`,
+                title: `Morrigan Server API`,
+                description: `Morrigan management server<br>
+                    Version: ${this.serverInfo.version}<br>
+                    Server ID: ${this.serverInfo.id}`,
                 version: this.serverInfo.version
             },
             paths: {}
@@ -366,8 +373,6 @@ class Morrigan {
 
         /*** Include spec exported by modules ***/
         this.components.forEach(component => {
-
-            console.log(component)
 
             let openapi = component.module.openapi
 
@@ -430,7 +435,9 @@ class Morrigan {
 
                 // Check each layer on the routes' stack.
                 route.stack.forEach(layer => {
-                    let spec = doc.paths[route.path] || {}
+                    let fullPath = mw.handle._morriganRootPath + route.path
+
+                    let spec = doc.paths[fullPath] || {}
                     let m = layer.method
                     if (m) {
                         let openapi = layer.handle['openapi'] || {}
@@ -449,7 +456,7 @@ class Morrigan {
                         }
                     }
                     
-                    doc.paths[route.path] = spec
+                    doc.paths[fullPath] = spec
                 })
             })
         })
