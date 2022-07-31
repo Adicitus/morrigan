@@ -104,7 +104,7 @@ class Logger {
                 }
             )
         )
-        console.log(this._logDir)
+        
         this._engine.log('info', `Writing log files to '${fs.realpathSync(this._logDir)}'.`)
     }
 
