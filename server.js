@@ -60,7 +60,7 @@ class Morrigan {
         log('Finished setting up logging.')
         
         log('Loading components...')
-        let componentSpecs = serverSettings.component || {}
+        let componentSpecs = serverSettings.components || {}
         this.components = []
         Object.keys(componentSpecs).forEach(componentName => {
 
