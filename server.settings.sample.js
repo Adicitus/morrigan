@@ -45,13 +45,15 @@ module.exports = {
      * Accepts the following options:
      * - console: boolean to determine where if the logged messages should also be printed to the console (default: true).
      * - logDir: The directory on the local machine where log files should be written (default: '/morrigan.server/logs').
+     * - level: The level of messages to log (see: https://www.npmjs.com/package/winston#logging-levels).
      * 
-     * Neither of these options are mandatory.
+     * None of these options are mandatory.
      * 
      */
     logger: {
         console: true,
-        logDir: "/morrigan.server/logs"
+        logDir: "/morrigan.server/logs",
+        level: 'info'
     },
 
     /**

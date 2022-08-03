@@ -14,15 +14,21 @@ class Logger {
 
     log = null
 
-    constructor() {
+    constructor(app, settings) {
+
+        settings = settings || {}
+
         const logFormat = winston.format.printf(({level, message, timestamp}) => {
             return `${timestamp} ${level.padEnd(7)} | ${message}`
         })
+
+        let logLevel = settings.level || 'info'
 
         // Default transport:
         this._consoleLogger = new winston.transports.Console()
 
         this._engine = winston.createLogger({
+            level: logLevel,
             format: winston.format.combine(
                 winston.format.timestamp(),
                 logFormat
@@ -31,6 +37,8 @@ class Logger {
         })
 
         this.log = this.getLog()
+
+        this._setup(app, settings)
     }
 
     /**
@@ -42,7 +50,7 @@ class Logger {
      * @param {object} app Express application.
      * @param {object} settings Object containing logging settings.
      */
-    setup(app, settings) {
+    _setup(app, settings) {
 
         if (!settings) {
             settings = {}
@@ -80,18 +88,18 @@ class Logger {
             }
 
             this._logDir = settings.logDir
-
-            let transport = new winston.transports.DailyRotateFile({
-                filename: 'morrigan-%DATE%.log',
-                datePattern: 'YYYY-MM-DD-HH',
-                dirname: this._logDir,
-                zippedArchive: true,
-                maxSize: '20m',
-                maxFiles: '14d'
-            })
-
-            this._engine.add(transport)
         }
+
+        let transport = new winston.transports.DailyRotateFile({
+            filename: 'morrigan-%DATE%.log',
+            datePattern: 'YYYY-MM-DD-HH',
+            dirname: this._logDir,
+            zippedArchive: true,
+            maxSize: '20m',
+            maxFiles: '14d'
+        })
+
+        this._engine.add(transport)
 
         // Setup request logging:
         app.use(
@@ -105,7 +113,7 @@ class Logger {
             )
         )
         
-        this._engine.log('info', `Writing log files to '${fs.realpathSync(this._logDir)}'.`)
+        this._engine.log('info', `Writing log files to '${fs.realpathSync(this._logDir)}'. Log level is set to: '${this._engine.level}'`)
     }
 
     /**

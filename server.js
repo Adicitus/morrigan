@@ -53,8 +53,7 @@ class Morrigan {
         const app = this.app = express()
 
         console.log('Setting up logging...')
-        this.logger = new Logger()
-        this.logger.setup(app, serverSettings.logger)
+        this.logger = new Logger(app, serverSettings.logger)
         this.log = this.logger.getLog()
         const log = this.log
         log('Finished setting up logging.')
@@ -321,17 +320,29 @@ class Morrigan {
         await Promise.all(promises)
         l('Components finished shutting down.')
 
-        l('Stopping server record update interval...')
-        clearInterval(this._updateInterval)
-        
-        const selector = {id: this.serverInfo.id}
-        l('Updating server record...')
-        const record = this._serverRecord
-        record.checkInTime = DateTime.now().toISO()
-        record.live = false
-        record.stopReason = stopReason
-        await this._instances.replaceOne(selector, record)
-        l('Bye!')
+        l('Stopping HTTP server instance...')
+        this.server.close(async () => {
+
+            l('HTTP server finished shutting down.')
+
+            l('Stopping server record update interval...')
+            clearInterval(this._updateInterval)
+            
+            const selector = {id: this.serverInfo.id}
+            l('Updating server record...')
+            const record = this._serverRecord
+            record.checkInTime = DateTime.now().toISO()
+            record.live = false
+            record.stopReason = stopReason
+            await this._instances.replaceOne(selector, record).then(() => {
+                l('Instance record updated.')
+            }).catch((err) => {
+                l('Failed to update the instance record.', 'error')
+                l(err)
+            }).finally(() => {
+                l('Bye!')
+            })
+        })
     }
 
     _buildApiDoc() {
