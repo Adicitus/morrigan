@@ -60,10 +60,11 @@ class Morrigan {
         log('Finished setting up logging.')
         
         log('Loading components...')
+        let componentSpecs = serverSettings.component || {}
         this.components = []
-        Object.keys(serverSettings.components).forEach(componentName => {
+        Object.keys(componentSpecs).forEach(componentName => {
 
-            let componentSpec = serverSettings.components[componentName]
+            let componentSpec = componentSpecs[componentName]
             if (!componentSpec.module) {
                 log(`No module specified for component '${componentName}', skipping it...`)
                 return
@@ -71,12 +72,20 @@ class Morrigan {
         
             let module = null
         
-            try {
-                module = require(componentSpec.module)
-            } catch (e) {
-                log(`Unabled to load the module '${componentSpec.module}' defined by component '${componentName}':`)
-                log(e)
-                return
+            switch(typeof componentSpec.module) {
+                case 'function':
+                case 'object':
+                    module = componentSpec.module
+                    break
+                case 'string':
+                    try {
+                        module = require(componentSpec.module)
+                    } catch (e) {
+                        log(`Unabled to load the module '${componentSpec.module}' defined by component '${componentName}':`)
+                        log(e)
+                        return
+                    }
+                    break;
             }
         
             log(`Registered component module '${componentSpec.module}' as '${componentName}'`)
@@ -84,8 +93,9 @@ class Morrigan {
             this.components.push({name: componentName, module: module, route: `/api/${componentName}`, specification: componentSpec })
         })
 
-        log(`Reading server state (looking in '${serverSettings.stateDir}')...`)
-        this.serverInfo = require('./server.info').build(serverSettings.stateDir)
+        let stateDir = serverSettings.stateDir || '/morrigan.server/state'
+        log(`Reading server state (looking in '${stateDir}')...`)
+        this.serverInfo = require('./server.info').build(stateDir)
         log('Finished reading server state.')
         log(`Running Morrigan server version ${this.serverInfo.version}.`)
 
@@ -185,6 +195,22 @@ class Morrigan {
         const components = this.components
         const server = this.server
         const port = this.port
+
+        if (!serverSettings.database) {
+            log("No 'database' section specified in the server settings, unable to connect to database. Quitting.", 'error')
+            return
+        }
+
+        if (!serverSettings.database.connectionString) {
+            log("No 'connectionString' specified in 'database' section of the server settings, unable to connect to database. Quitting.", 'error')
+            return
+        }
+
+        let dbname = serverSettings.database.dbname
+        if (!dbname) {
+            log("No 'dbname' specified in 'database' section of the server settings, server records will be stored in the database named 'test'.", 'warn')
+            dbname = 'test'
+        }
 
         // Establish connection to MongoDB:
         var database = null
@@ -306,7 +332,6 @@ class Morrigan {
         record.stopReason = stopReason
         await this._instances.replaceOne(selector, record)
         l('Bye!')
-        process.exit()
     }
 
     _buildApiDoc() {

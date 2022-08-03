@@ -2,7 +2,7 @@ module.exports = {
 
     /*
         Directory where the state information for this server should be stored.
-        Defaults to `${__dirname}/state`.
+        If not specified defaults to `/morrigan.server/state`.
     */
     stateDir: "/morrigan.server/state",
 
@@ -44,7 +44,10 @@ module.exports = {
      * 
      * Accepts the following options:
      * - console: boolean to determine where if the logged messages should also be printed to the console (default: true).
-     * - logDir: The directory on the local machine where log files should be written (default: '/morrigan.server/logs'). 
+     * - logDir: The directory on the local machine where log files should be written (default: '/morrigan.server/logs').
+     * 
+     * Neither of these options are mandatory.
+     * 
      */
     logger: {
         console: true,
@@ -55,10 +58,11 @@ module.exports = {
      * Components specifications.
      * 
      * Each key in the component specifications object should contain a component specification, consisting of the following keys:
-     * - module: Name of a module to load. This key is required.
-     * - providers: An array of names for modules that the component should use as providers. This key is not required, but is used by both built-in components.
+     * - module: Name of a module to load. This key is required (any component without it will be skipped).
+     * - providers: An array of names for modules that the component should use as providers.
+     *   This key is not required, but is used by both built-in components to specify what functionality to provide.
      * 
-     * This setting is required and has no defaults.
+     * This setting can be omitted, but this will result in a server without any functionality.
      */
     components: {
         core: {
