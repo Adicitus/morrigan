@@ -107,7 +107,7 @@ class Logger {
                 '--> :remote-addr :method :url :status - :res[content-length]b :response-time ms',
                 {
                     stream: {
-                        write: (msg) => this.log(msg.trim())
+                        write: (msg) => this.log(msg.trim(), 'http')
                     }
                 }
             )

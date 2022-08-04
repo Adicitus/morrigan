@@ -7,12 +7,23 @@ const bodyParser = require('body-parser')
 const Logger =  require('./modules/Logger')
 const swaggerUi = require('swagger-ui-express')
 
+const serverStates = {
+    error: -1,
+    instanced: 0,
+    initialized: 1,
+    starting: 2,
+    starting_connected: 3,
+    ready: 4,
+    stopping: 5,
+    stopped: 6
+}
+
 /**
  * Main class of Morrigan administration system.
  */
 class Morrigan {
     settings = null
-    log = null
+    log = (msg, level) => { level = level || 'info'; console.log(`${level}: ${msg}`) }
     port = 3000
     app = null
     serverInfo = null
@@ -20,9 +31,10 @@ class Morrigan {
     logger = null
     components = null
 
-    #_updateInterval = null
-    #_serverRecord = null
-    #_instances = null
+    _updateInterval = null
+    _serverRecord = null
+    _instances = null
+    _state = serverStates.error
 
     /**
      * Main constructor.
@@ -36,6 +48,8 @@ class Morrigan {
         if (settings.http && settings.http.port) {
             this.port = settings.http.port
         }
+
+        this._state = serverStates.instanced
     }
 
     /**
@@ -52,7 +66,7 @@ class Morrigan {
         const serverSettings = this.settings
         const app = this.app = express()
 
-        console.log('Setting up logging...')
+        this.log('Setting up logging...')
         this.logger = new Logger(app, serverSettings.logger)
         this.log = this.logger.getLog()
         const log = this.log
@@ -176,6 +190,8 @@ class Morrigan {
                 app.use(m.getMiddleware())
             }
         })
+
+        this._state = serverStates.initialized
     }
 
     /**
@@ -184,8 +200,21 @@ class Morrigan {
      * This will cause the server to attempt a connection to the configured MongoDB instance.
      * 
      * If the connection succeeds, all loaded components will be configured using their .setup method.
+     * 
+     * If the 'setup' method has not been called, this method will attempt to call it in order to initialize the server.
      */
     async start() {
+        if (this._state < serverStates.initialized) {
+            try {
+                this.log(`'start' method called, but server is not in an initialized state. Attempting to initialize...`)
+                this.setup()
+            } catch(e) {
+                this.log(`Failed to initialize: ${JSON.stringify(e)}`)
+                return
+            }
+        }
+
+        this._state = serverStates.starting
 
         const serverInfo = this.serverInfo
         const serverSettings = this.settings
@@ -215,6 +244,8 @@ class Morrigan {
         var database = null
         const mongoClient = require('mongodb').MongoClient
         mongoClient.connect(serverSettings.database.connectionString, { useUnifiedTopology: true }).then(async client => {
+            this._state = serverStates.starting_connected
+
             log('MongoDB server connected.')
             log(`Using DB '${serverSettings.database.dbname}'.`)
             database = client.db(serverSettings.database.dbname)
@@ -289,7 +320,11 @@ class Morrigan {
 
             log('Finished instance reporting setup.')
 
+            this._state = serverStates.ready
+
         }).catch(err => {
+            this._state = serverStates.error
+
             log('Error while connecting to DB:')
             log(err)
             if (err.stack) {
@@ -304,9 +339,17 @@ class Morrigan {
      * The stopReaason argument can be as short as a signal name (SIGTERM, SIGHUP), a more detailed message or even an object.
      * It will be included in the final entity record for this server.
      * 
+     * This method does nothing if the server is not in the 'ready' state.
+     * 
      * @param {string} stopReason Reason for the server stopping.
      */
     async stop(stopReason) {
+        if (this._state !== serverStates.ready) {
+            return
+        }
+        
+        this._state = serverStates.stopping
+
         const l = this.log
 
         l('Calling onShutdown methods on components...')
@@ -340,6 +383,7 @@ class Morrigan {
                 l('Failed to update the instance record.', 'error')
                 l(err)
             }).finally(() => {
+                this._state = serverStates.stopped
                 l('Bye!')
             })
         })
@@ -381,12 +425,12 @@ class Morrigan {
                 componentsKeys.forEach(componentKey => {
                     let sourceMap = sourceObject[componentKey]
                     if (!sourceMap) {
-                        console.log(`Did not find key '${componentKey}'.`)
+                        this.log(`Did not find key '${componentKey}'.`)
                         return
                     }
 
                     if (typeof sourceMap !== 'object') {
-                        console.log(`Found key '${componentKey}', but it is not the expected type (expected 'object', found '${typeof sourceMap}')`)
+                        this.log(`Found key '${componentKey}', but it is not the expected type (expected 'object', found '${typeof sourceMap}')`)
                         return
                     }
 
@@ -412,8 +456,10 @@ class Morrigan {
 
             let openapi = component.module.openapi
 
-            if (!openapi) {
-                console.log(`No .openapi key exported by the '${component.name}'`)
+            if (openapi) {
+                this.log(`Reading .openapi key on component ${component.name}`)
+            } else {
+                this.log(`No .openapi key exported by the '${component.name}'`)
                 return
             }
 
@@ -422,12 +468,12 @@ class Morrigan {
                 openapiKeys.forEach(key => {
                     let source = spec[key.name]
                     if (!source) {
-                        console.log(`Did not find key '${key.name}' on .openapi declaration from '${component.name}'.`)
+                        this.log(`Did not find key '${key.name}' on .openapi declaration from '${component.name}'.`)
                         return
                     }
 
                     if (typeof source !== key.type) {
-                        console.log(`Found key '${key.name}' on .openapi declaration from '${component.name}', but it does not match the expected type (expected '${key.type}' found '${typeof source}')`)
+                        this.log(`Found key '${key.name}' on .openapi declaration from '${component.name}', but it does not match the expected type (expected '${key.type}' found '${typeof source}')`)
                         return
                     }
 
