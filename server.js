@@ -13,9 +13,10 @@ const serverStates = {
     initialized: 1,
     starting: 2,
     starting_connected: 3,
-    ready: 4,
-    stopping: 5,
-    stopped: 6
+    started: 4,
+    ready: 5,
+    stopping: 6,
+    stopped: 7
 }
 
 /**
@@ -287,6 +288,8 @@ class Morrigan {
                 log(`Listening on port ${port}.`)
             })
 
+            this._state = serverStates.started
+
             log('Setting up instance reporting...')
 
             const instances = database.collection('morrigan.instances')
@@ -297,11 +300,41 @@ class Morrigan {
 
             const serverRecord = {
                 id: serverInfo.id,
-                settings: serverSettings,
+                components: [],
                 state: serverInfo,
                 live: true,
                 checkInTime: DateTime.now().toISO()
             }
+
+            this.components.forEach(c => {
+                let c2 = {}
+
+                Object.keys(c).forEach(k => {
+                    if (k === 'module') {
+                        // Skip the loaded module.
+                        return
+                    }
+
+                    if (k === 'specification') {
+                        // Extract module spec and discard the rest to avoid trouble when storing the record:
+                        let m = c[k].module
+                        switch (typeof m) {
+                            case 'function':
+                            case 'object':
+                                c2.module = 'anonymous'
+                                break
+                            case 'string':
+                                c2.module = m
+                                break
+                        }
+                        return
+                    }
+
+                    c2[k] = c[k]
+                })
+
+                serverRecord.components.push(c2)
+            })
 
             this._serverRecord = serverRecord
 
@@ -344,7 +377,7 @@ class Morrigan {
      * @param {string} stopReason Reason for the server stopping.
      */
     async stop(stopReason) {
-        if (this._state !== serverStates.ready) {
+        if (this._state < serverStates.started || this._state >= serverStates.stopping) {
             return
         }
         

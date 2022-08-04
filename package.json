@@ -1,6 +1,6 @@
 {
   "name": "@adicitus/morrigan.server",
-  "version": "0.6.1",
+  "version": "0.7.0",
   "description": "Morrigan management system server.",
   "main": "server.js",
   "dependencies": {
