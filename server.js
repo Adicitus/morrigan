@@ -566,25 +566,44 @@ class Morrigan {
                 route.stack.forEach(layer => {
                     let fullPath = mw.handle._morriganRootPath + route.path
 
+                    this.log(`Looking for .openapi declarations @ '${fullPath}...`, 'debug')
+
                     let spec = doc.paths[fullPath] || {}
-                    let m = layer.method
-                    if (m) {
-                        let openapi = layer.handle['openapi'] || {}
-                        if (openapi[m]) {
-                            // Use the openapi spec declared on the handler: 
-                            spec[m] = openapi[m]
-                        } else {
-                            // Default value for unspecified openapi spec:
-                            spec[m] = {
-                                responses: {
-                                    default: {
-                                        description: "Unknown: no .openapi object specified on the handler function."
-                                    }
-                                }
+
+                    let defaultSpec = {
+                        responses: {
+                            default: {
+                                description: "Unknown: no .openapi object specified on the handler function."
                             }
                         }
                     }
+
+                    let m = layer.method
+
+                    if (!m) {
+                        this.log(`No method decalred on layer, skipping.`)
+                        return
+                    }
+
+                    let openapi = layer.handle['openapi'] || {}
                     
+                    if (!openapi) {
+                        this.log(`No .openapi declaration found for ${m.toUpperCase()} ${fullPath}. Adding default spec...`, 'debug')
+                        // Default value for unspecified openapi spec:
+                        spec[m] = defaultSpec
+                    } else {
+                        
+                        if (openapi[m]) {
+                            this.log(`Found .openapi declaration for '${m}' method.`, 'debug')
+                            this.log(openapi[m], 'silly')
+                            // Use the openapi spec declared on the handler: 
+                            spec[m] = openapi[m]
+                        } else {
+                            this.log(`No .openapi declaration found for ${m.toUpperCase()} ${fullPath}.`, 'silly')
+                            // Default value for unspecified openapi spec:
+                            spec[m] = defaultSpec
+                        }
+                    }
                     doc.paths[fullPath] = spec
                 })
             })
