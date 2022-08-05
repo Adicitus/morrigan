@@ -496,6 +496,10 @@ class Morrigan {
                 return
             }
 
+            if (!Array.isArray(openapi)) {
+                openapi = [openapi]
+            }
+
             openapi.forEach(spec => {
 
                 openapiKeys.forEach(key => {
@@ -505,9 +509,19 @@ class Morrigan {
                         return
                     }
 
-                    if (typeof source !== key.type) {
-                        this.log(`Found key '${key.name}' on .openapi declaration from '${component.name}', but it does not match the expected type (expected '${key.type}' found '${typeof source}')`)
-                        return
+                    switch(key.type) {
+                        case 'array':
+                            if (Array.isArray(source)) {
+                                this.log(`Found key '${key.name}' on .openapi declaration from '${component.name}', but it does not match the expected type (expected '${key.type}' found '${typeof source}')`)
+                                return
+                            }
+                            break
+                        default:
+                            if (typeof source !== key.type) {
+                                this.log(`Found key '${key.name}' on .openapi declaration from '${component.name}', but it does not match the expected type (expected '${key.type}' found '${typeof source}')`)
+                                return
+                            }
+                            break
                     }
 
                     let destination = doc[key.name]
