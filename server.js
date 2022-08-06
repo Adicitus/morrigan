@@ -511,7 +511,7 @@ class Morrigan {
 
                     switch(key.type) {
                         case 'array':
-                            if (Array.isArray(source)) {
+                            if (!Array.isArray(source)) {
                                 this.log(`Found key '${key.name}' on .openapi declaration from '${component.name}', but it does not match the expected type (expected '${key.type}' found '${typeof source}')`)
                                 return
                             }
