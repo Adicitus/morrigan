@@ -458,12 +458,12 @@ class Morrigan {
                 componentsKeys.forEach(componentKey => {
                     let sourceMap = sourceObject[componentKey]
                     if (!sourceMap) {
-                        this.log(`Did not find key '${componentKey}'.`)
+                        this.log(`Did not find key '${componentKey}' in components.`, 'debug')
                         return
                     }
 
                     if (typeof sourceMap !== 'object') {
-                        this.log(`Found key '${componentKey}', but it is not the expected type (expected 'object', found '${typeof sourceMap}')`)
+                        this.log(`Found key '${componentKey}', but it is not the expected type (expected 'object', found '${typeof sourceMap}')`, 'warn')
                         return
                     }
 
@@ -490,9 +490,9 @@ class Morrigan {
             let openapi = component.module.openapi
 
             if (openapi) {
-                this.log(`Reading .openapi key on component ${component.name}`)
+                this.log(`Reading .openapi key on component ${component.name}`, 'debug')
             } else {
-                this.log(`No .openapi key exported by the '${component.name}'`)
+                this.log(`No .openapi key exported by the '${component.name}'`, 'debug')
                 return
             }
 
@@ -505,24 +505,26 @@ class Morrigan {
                 openapiKeys.forEach(key => {
                     let source = spec[key.name]
                     if (!source) {
-                        this.log(`Did not find key '${key.name}' on .openapi declaration from '${component.name}'.`)
+                        this.log(`Did not find key '${key.name}' on .openapi declaration from '${component.name}'.`, 'debug')
                         return
                     }
 
                     switch(key.type) {
                         case 'array':
                             if (!Array.isArray(source)) {
-                                this.log(`Found key '${key.name}' on .openapi declaration from '${component.name}', but it does not match the expected type (expected '${key.type}' found '${typeof source}')`)
+                                this.log(`Found key '${key.name}' on .openapi declaration from '${component.name}', but it does not match the expected type (expected '${key.type}' found '${typeof source}')`, 'warn')
                                 return
                             }
                             break
                         default:
                             if (typeof source !== key.type) {
-                                this.log(`Found key '${key.name}' on .openapi declaration from '${component.name}', but it does not match the expected type (expected '${key.type}' found '${typeof source}')`)
+                                this.log(`Found key '${key.name}' on .openapi declaration from '${component.name}', but it does not match the expected type (expected '${key.type}' found '${typeof source}')`, 'warn')
                                 return
                             }
                             break
                     }
+
+                    this.log(`Reading key '${key.name}' on .openapi declaration from '${component.name}'.`, 'debug')
 
                     let destination = doc[key.name]
 
@@ -581,7 +583,7 @@ class Morrigan {
                     let m = layer.method
 
                     if (!m) {
-                        this.log(`No method decalred on layer, skipping.`)
+                        this.log(`No method declared on layer, skipping.`, 'debug')
                         return
                     }
 
@@ -595,7 +597,9 @@ class Morrigan {
                         
                         if (openapi[m]) {
                             this.log(`Found .openapi declaration for '${m}' method.`, 'debug')
-                            this.log(openapi[m], 'silly')
+                            try {
+                                this.log(JSON.stringify(openapi[m]), 'silly')
+                            } catch { /* NOOP */ }
                             // Use the openapi spec declared on the handler: 
                             spec[m] = openapi[m]
                         } else {
