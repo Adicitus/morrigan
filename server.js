@@ -450,7 +450,7 @@ class Morrigan {
                     'examples',
                     'requestBodies',
                     'headers',
-                    'securitySchemas',
+                    'securitySchemes',
                     'links',
                     'callbacks'
                 ]
