@@ -259,36 +259,46 @@ class Morrigan {
                 settings: serverSettings
             }
 
-            log('Setting up components...')
-            let promises = []
-            components.forEach(c => {
-                let router = express.Router()
-                app.use(c.route, router)
-                router._morriganRootPath = c.route
-                promises.push(c.module.setup(c.name, c.specification, router, environment))
-            })
-            await Promise.all(promises)
-            log ('Setup Finished.')
-
-            app.get('/api-docs', (req, res) => {
-
-                let routes = this._buildApiDoc()
-
-                res.setHeader('Content-Type', 'application/json')
-                res.end(JSON.stringify(routes))
-            })
-
-            app.use('/api-docs/view', swaggerUi.serve, swaggerUi.setup(null, {
-                swaggerOptions: {
-                    url: '/api-docs'
-                }
-            }))
-
-            server.listen(port, () => {
+            server.listen(port, async () => {
                 log(`Listening on port ${port}.`)
-            })
 
-            this._state = serverStates.started
+                this._state = serverStates.started
+                
+                let protocol = this.settings.http && this.settings.http.secure ? 'https' : 'http'
+                let hostname = this.settings.http && this.settings.http.hostname ? this.settings.http.hostname : (server.address().address)
+                environment.baseUrl = `${protocol}://${hostname}:${port}`
+    
+                log(`API endpoint URL: ${environment.apiBaseUrl}`, 'info')
+
+                log('Setting up components...')
+                let promises = []
+                components.forEach(c => {
+                    let router = express.Router()
+                    app.use(c.route, router)
+                    router._morriganRootPath = c.route
+
+                    c.specification.endpointUrl = environment.baseUrl + c.route
+                    log(`Starting setup of component '${c.name}' (${c.specification.endpointUrl})`, 'info')
+                    promises.push(c.module.setup(c.name, c.specification, router, environment))
+                })
+                await Promise.all(promises)
+                log ('Component setup Finished.')
+                
+
+                app.get('/api-docs', (req, res) => {
+
+                    let routes = this._buildApiDoc()
+
+                    res.setHeader('Content-Type', 'application/json')
+                    res.end(JSON.stringify(routes))
+                })
+
+                app.use('/api-docs/view', swaggerUi.serve, swaggerUi.setup(null, {
+                    swaggerOptions: {
+                        url: '/api-docs'
+                    }
+                }))
+            })
 
             log('Setting up instance reporting...')
 
