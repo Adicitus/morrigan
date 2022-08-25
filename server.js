@@ -275,7 +275,7 @@ class Morrigan {
                 components.forEach(c => {
                     let router = express.Router()
                     app.use(c.route, router)
-                    router._morriganRootPath = c.route
+                    router._morrigan = { route: c.route }
 
                     c.specification.endpointUrl = environment.baseUrl + c.route
                     log(`Starting setup of component '${c.name}' (${c.specification.endpointUrl})`, 'info')
@@ -558,27 +558,40 @@ class Morrigan {
 
         /*** Include spec from registered paths ***/
 
-        // Check all middleware on app:
-        this.app._router.stack.forEach(mw => {
-            if (mw.name !== 'router') {
-                // Ignore this mw if it's not a router
-                return 
+        /**
+         * Helper function to explore the Express application to discover endpoints. 
+         * 
+         * @param {object} router Expressjs handle object. This may be a router of an endpoint. For the first call this should be the global router for the application.
+         * @param {string} basePath The endpoint path that we have accumulated so far. 
+         * @param {object} doc The complete OpenAPI specification document. Paths will be added to this when discovered.
+         * @param {object} log Logging function. 
+         * @returns The object passed into the 'doc' parameter.
+         */
+        function _mapEndpoints(router, basePath, doc, log) {
+
+            if (!router.stack) {
+                return doc
             }
 
-            // Check each handler in the router's stack:
-            mw.handle.stack.forEach(handler => {
-                if (!handler.route) {
-                    // We only handle routers with routes
-                    return
+            router.stack.forEach(layer => {
+                console.log(layer)
+                if (layer.name === 'router') {
+                    // This is not an endpoint, recurse and look for endpoints there
+                    return _mapEndpoints(layer.handle, (layer.handle._morrigan.route) ? basePath + layer.handle._morrigan.route : basePath, doc, log)
                 }
 
-                let route = handler.route
 
-                // Check each layer on the routes' stack.
+                if (!layer.route) {
+                    return doc
+                }
+
+                let route = layer.route
+
                 route.stack.forEach(layer => {
-                    let fullPath = mw.handle._morriganRootPath + route.path
 
-                    this.log(`Looking for .openapi declarations @ '${fullPath}...`, 'debug')
+                    let fullPath = basePath + route.path
+
+                    log(`Looking for .openapi declarations @ '${fullPath}...`, 'debug')
 
                     let spec = doc.paths[fullPath] || {}
 
@@ -606,14 +619,14 @@ class Morrigan {
                     } else {
                         
                         if (openapi[m]) {
-                            this.log(`Found .openapi declaration for '${m}' method.`, 'debug')
+                            log(`Found .openapi declaration for '${m}' method.`, 'debug')
                             try {
                                 this.log(JSON.stringify(openapi[m]), 'silly')
                             } catch { /* NOOP */ }
                             // Use the openapi spec declared on the handler: 
                             spec[m] = openapi[m]
                         } else {
-                            this.log(`No .openapi declaration found for ${m.toUpperCase()} ${fullPath}.`, 'silly')
+                            log(`No .openapi declaration found for ${m.toUpperCase()} ${fullPath}.`, 'silly')
                             // Default value for unspecified openapi spec:
                             spec[m] = defaultSpec
                         }
@@ -621,7 +634,11 @@ class Morrigan {
                     doc.paths[fullPath] = spec
                 })
             })
-        })
+        }
+
+        let self = this
+
+        _mapEndpoints(this.app._router, '', doc, (msg, level) => { self.log(msg, level) })
 
         return doc
     }
