@@ -268,7 +268,7 @@ class Morrigan {
                 let hostname = this.settings.http && this.settings.http.hostname ? this.settings.http.hostname : (server.address().address)
                 environment.baseUrl = `${protocol}://${hostname}:${port}`
     
-                log(`API endpoint URL: ${environment.apiBaseUrl}`, 'info')
+                log(`API base URL: ${environment.baseUrl}`, 'info')
 
                 log('Setting up components...')
                 let promises = []
