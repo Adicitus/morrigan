@@ -255,8 +255,7 @@ class Morrigan {
             const environment = {
                 db: database,
                 info: serverInfo,
-                log: log,
-                settings: serverSettings
+                log: log
             }
 
             server.listen(port, async () => {
