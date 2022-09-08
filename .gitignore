@@ -1,4 +1,6 @@
 state
+log
+data
 node_modules
 server.settings.js
 cert.pem

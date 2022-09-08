@@ -37,6 +37,69 @@ class Morrigan {
     _instances = null
     _state = serverStates.error
 
+    _eventHandlers = {
+        error: [],
+        initialized: [],
+        starting: [],
+        starting_connected: [],
+        started: [],
+        ready: [],
+        stopping: [],
+        stopped: []
+    }
+
+    /**
+     * Returns a list of all event names.
+     * 
+     * @returns A list of all available event names.
+     */
+    eventNames() {
+        return Object.keys(this._eventHandlers)
+    }
+
+    /**
+     * Registers a handler function to be called when the named event is emitted.
+     * 
+     * @param {string} eventName Name of the event to register a handler for.
+     * @param {function} handler Handler to call when the event triggers.
+     */
+    on(eventName, handler) {
+        if (!Object.keys(this._eventHandlers).includes(eventName)) {
+            throw `Invalid event name for Morrigan server: ${eventName}` 
+        }
+
+        if (typeof handler !== 'function') {
+            throw `Invalid event handler provided (expected a function, found '${typeof handler}')` 
+        }
+
+        this._eventHandlers[eventName].push(handler)
+    }
+
+    /**
+     * Unregisters a handle for the given event.
+     * 
+     * @param {string} eventName Name of the event to unregister the handler for.
+     * @param {function} handler Handler previously registered for this event. 
+     */
+    off(eventName, handler) {
+        if (!Object.keys(this._eventHandlers).includes(eventName)) {
+            throw `Invalid event name for Morrigan server: ${eventName}` 
+        }
+
+        this._eventHandlers[eventName] = this._eventHandlers[eventName].filter( h => h !== handler)
+    }
+
+    _emitEvent(eventName, eventArgs) {
+
+        if (!Object.keys(this._eventHandlers).includes(eventName)) {
+            throw `Invalid event name for Morrigan server: ${eventName}` 
+        }
+        
+        this._eventHandlers[eventName].forEach(handler => {
+            typeof handler === 'function' && handler(eventName, eventArgs)
+        })
+    }
+
     /**
      * Main constructor.
      * 
@@ -60,9 +123,8 @@ class Morrigan {
      * - Loads and installs the components.
      * - Loads server info.
      * - Configures a HTTP(S) server with Express WebSocket.
-     * @returns 
      */
-    setup() {
+    async setup(callback) {
 
         const serverSettings = this.settings
         const app = this.app = express()
@@ -193,6 +255,9 @@ class Morrigan {
         })
 
         this._state = serverStates.initialized
+        this._emitEvent('initialized')
+
+        typeof callback === 'function' && callback()
     }
 
     /**
@@ -204,11 +269,11 @@ class Morrigan {
      * 
      * If the 'setup' method has not been called, this method will attempt to call it in order to initialize the server.
      */
-    async start() {
+    async start(callback) {
         if (this._state < serverStates.initialized) {
             try {
                 this.log(`'start' method called, but server is not in an initialized state. Attempting to initialize...`)
-                this.setup()
+                await this.setup()
             } catch(e) {
                 this.log(`Failed to initialize: ${JSON.stringify(e)}`)
                 return
@@ -216,6 +281,7 @@ class Morrigan {
         }
 
         this._state = serverStates.starting
+        this._emitEvent('starting')
 
         const serverInfo = this.serverInfo
         const serverSettings = this.settings
@@ -224,6 +290,8 @@ class Morrigan {
         const components = this.components
         const server = this.server
         const port = this.port
+
+        const self = this
 
         if (!serverSettings.database) {
             log("No 'database' section specified in the server settings, unable to connect to database. Quitting.", 'error')
@@ -246,6 +314,7 @@ class Morrigan {
         const mongoClient = require('mongodb').MongoClient
         mongoClient.connect(serverSettings.database.connectionString, { useUnifiedTopology: true }).then(async client => {
             this._state = serverStates.starting_connected
+            this._emitEvent('starting_connected')
 
             log('MongoDB server connected.')
             log(`Using DB '${serverSettings.database.dbname}'.`)
@@ -262,6 +331,7 @@ class Morrigan {
                 log(`Listening on port ${port}.`)
 
                 this._state = serverStates.started
+                this._emitEvent('started')
                 
                 let protocol = this.settings.http && this.settings.http.secure ? 'https' : 'http'
                 let hostname = this.settings.http && this.settings.http.hostname ? this.settings.http.hostname : (server.address().address)
@@ -297,81 +367,89 @@ class Morrigan {
                         url: '/api-docs'
                     }
                 }))
-            })
+                
 
-            log('Setting up instance reporting...')
+                log('Setting up instance reporting...')
 
-            const instances = database.collection('morrigan.instances')
-            this._instances = instances
+                const instances = database.collection('morrigan.instances')
+                this._instances = instances
 
-            const selector = {id: serverInfo.id}
-            let remoteRecord = await instances.findOne(selector)
+                const selector = {id: serverInfo.id}
+                let remoteRecord = await instances.findOne(selector)
 
-            const serverRecord = {
-                id: serverInfo.id,
-                components: [],
-                state: serverInfo,
-                live: true,
-                checkInTime: DateTime.now().toISO()
-            }
+                const serverRecord = {
+                    id: serverInfo.id,
+                    components: [],
+                    state: serverInfo,
+                    live: true,
+                    checkInTime: DateTime.now().toISO()
+                }
 
-            this.components.forEach(c => {
-                let c2 = {}
+                this.components.forEach(c => {
+                    let c2 = {}
 
-                Object.keys(c).forEach(k => {
-                    if (k === 'module') {
-                        // Skip the loaded module.
-                        return
-                    }
-
-                    if (k === 'specification') {
-                        // Extract module spec and discard the rest to avoid trouble when storing the record:
-                        let m = c[k].module
-                        switch (typeof m) {
-                            case 'function':
-                            case 'object':
-                                c2.module = 'anonymous'
-                                break
-                            case 'string':
-                                c2.module = m
-                                break
+                    Object.keys(c).forEach(k => {
+                        if (k === 'module') {
+                            // Skip the loaded module.
+                            return
                         }
-                        return
-                    }
 
-                    c2[k] = c[k]
+                        if (k === 'specification') {
+                            // Extract module spec and discard the rest to avoid trouble when storing the record:
+                            let m = c[k].module
+                            switch (typeof m) {
+                                case 'function':
+                                case 'object':
+                                    c2.module = 'anonymous'
+                                    break
+                                case 'string':
+                                    c2.module = m
+                                    break
+                            }
+                            return
+                        }
+
+                        c2[k] = c[k]
+                    })
+
+                    serverRecord.components.push(c2)
                 })
 
-                serverRecord.components.push(c2)
+                this._serverRecord = serverRecord
+
+                if (remoteRecord == null) {
+                    log('Registering instance...')
+                    await instances.insertOne(serverRecord)
+                } else {
+                    log('Updating instance record...')
+                    await instances.replaceOne(selector, serverRecord)
+                }
+
+                this._updateInterval = setInterval(async () => {
+                    serverRecord.checkInTime = DateTime.now().toISO()
+                    instances.replaceOne(selector, serverRecord)
+                }, 30000)
+
+                log('Finished instance reporting setup.')
+
+                self._state = serverStates.ready
+                this._emitEvent('ready')
+
+                typeof callback === 'function' && callback()
             })
 
-            this._serverRecord = serverRecord
-
-            if (remoteRecord == null) {
-                log('Registering instance...')
-                await instances.insertOne(serverRecord)
-            } else {
-                log('Updating instance record...')
-                await instances.replaceOne(selector, serverRecord)
-            }
-
-            this._updateInterval = setInterval(async () => {
-                serverRecord.checkInTime = DateTime.now().toISO()
-                instances.replaceOne(selector, serverRecord)
-            }, 30000)
-
-            log('Finished instance reporting setup.')
-
-            this._state = serverStates.ready
 
         }).catch(err => {
             this._state = serverStates.error
+            this._emitEvent('error', err)
 
             log('Error while connecting to DB:')
             log(err)
             if (err.stack) {
                 log(err.stack)
             }
+
+            typeof callback === 'function' && callback()
         })
     }
 
@@ -384,13 +462,16 @@ class Morrigan {
      * This method does nothing if the server is not in the 'ready' state.
      * 
      * @param {string} stopReason Reason for the server stopping.
+     * @param {function} callback Function to call once method completes.
      */
-    async stop(stopReason) {
-        if (this._state < serverStates.started || this._state >= serverStates.stopping) {
+    async stop(stopReason, callback) {
+        if (this._state !== serverStates.ready) {
+            typeof callback === 'function' && callback()
             return
         }
         
         this._state = serverStates.stopping
+        this._emitEvent('stopping')
 
         const l = this.log
 
@@ -419,14 +500,16 @@ class Morrigan {
             record.checkInTime = DateTime.now().toISO()
             record.live = false
             record.stopReason = stopReason
-            await this._instances.replaceOne(selector, record).then(() => {
+            this._instances.replaceOne(selector, record).then(() => {
                 l('Instance record updated.')
             }).catch((err) => {
                 l('Failed to update the instance record.', 'error')
                 l(err)
             }).finally(() => {
                 this._state = serverStates.stopped
+                this._emitEvent('stopped')
                 l('Bye!')
+                typeof callback === 'function' && callback()
             })
         })
     }
@@ -573,7 +656,6 @@ class Morrigan {
             }
 
             router.stack.forEach(layer => {
-                console.log(layer)
                 if (layer.name === 'router') {
                     // This is not an endpoint, recurse and look for endpoints there
                     return _mapEndpoints(layer.handle, (layer.handle._morrigan.route) ? basePath + layer.handle._morrigan.route : basePath, doc, log)
