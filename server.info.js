@@ -1,15 +1,10 @@
-const fs = require('fs')
 const {v4: uuidv4} = require('uuid')
 const os = require('os')
 const { DateTime } = require('luxon')
 
-module.exports.build = (stateDirPath) => {
+module.exports.build = async (stateStore) => {
 
     let info = {}
-
-    if (stateDirPath === null) {
-        stateDirPath = `${__dirname}/state`
-    }
 
     info.version = require(__dirname + '/package.json').version
     info.serverRoot = __dirname
@@ -17,23 +12,15 @@ module.exports.build = (stateDirPath) => {
     info.startTime = DateTime.now().toISO()
     info.hostname = os.hostname()
 
-    if (!fs.existsSync(stateDirPath)) {
-        fs.mkdirSync(stateDirPath, {recursive: true})
-    }
-
-    let idFilePath = `${stateDirPath}/id`
-    let installTimeFilePath = `${stateDirPath}/installTime`
-    let id = null
+    let id = await stateStore.get('id')
     let installTime = null
-    if (!fs.existsSync(idFilePath)) {
+    if (id === null) {
         id = uuidv4()
-        fs.writeFileSync(idFilePath, id, { encoding: 'utf8' })
+        stateStore.set('id', id)
         installTime = DateTime.now().toISO()
-        fs.writeFileSync(installTimeFilePath, installTime, { encoding: 'utf8' })
+        stateStore.set('installTime', installTime)
         info.firstRun = true
     } else {
-        id = fs.readFileSync(idFilePath, { encoding: 'utf8' })
-        installTime = fs.readFileSync(installTimeFilePath, { encoding: 'utf8' })
         info.firstRun = false
     }
 

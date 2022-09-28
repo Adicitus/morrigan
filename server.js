@@ -4,8 +4,11 @@ const { DateTime } = require('luxon')
 const express = require('express')
 const expressws = require('express-ws')
 const bodyParser = require('body-parser')
-const Logger =  require('./modules/Logger')
 const swaggerUi = require('swagger-ui-express')
+
+const StateStore = require('@adicitus/morrigan.utils.statestore')
+
+const Logger =  require('./modules/Logger')
 
 const serverStates = {
     error: -1,
@@ -170,8 +173,9 @@ class Morrigan {
         })
 
         let stateDir = serverSettings.stateDir || '/morrigan.server/state'
+        this._rootStore = await StateStore(stateDir)
         log(`Reading server state (looking in '${stateDir}')...`)
-        this.serverInfo = require('./server.info').build(stateDir)
+        this.serverInfo = await (require('./server.info').build(this._rootStore))
         log('Finished reading server state.')
         log(`Running Morrigan server version ${this.serverInfo.version}.`)
 
@@ -348,7 +352,10 @@ class Morrigan {
 
                     c.specification.endpointUrl = environment.baseUrl + c.route
                     log(`Starting setup of component '${c.name}' (${c.specification.endpointUrl})`, 'info')
-                    promises.push(c.module.setup(c.name, c.specification, router, environment))
+                    let env = Object.assign({}, environment)
+                    env.state = this._rootStore.getStore(c.name, 'delegate')
+                    let p = c.module.setup(c.name, c.specification, router, env)
+                    promises.push(p)
                 })
                 await Promise.all(promises)
                 log ('Component setup Finished.')
@@ -515,7 +522,6 @@ class Morrigan {
     }
 
     _buildApiDoc() {
-        
         let doc = {
             openapi: '3.0.0',
             info: {

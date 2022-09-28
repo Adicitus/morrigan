@@ -1,7 +1,14 @@
+const fs = require('fs')
 const Morrigan = require('../server.js')
 const SwaggerParser = require('@apidevtools/swagger-parser')
 const testComponent = require('./testComponent')
 const assert = require('assert')
+
+const dataDir = `${__dirname}/data`
+
+if (fs.existsSync(dataDir)) {
+    fs.rmSync(dataDir, { recursive: true })
+}
 
 describe("Morrigan server", async () => {
    
@@ -20,7 +27,7 @@ describe("Morrigan server", async () => {
         
         let settings = {
 
-            stateDir: `${__dirname}/data/state`, 
+            stateDir: `${dataDir}/state`, 
 
             http: {
                 port: (Math.floor(Math.random() * 25536) + 40000)
@@ -44,8 +51,6 @@ describe("Morrigan server", async () => {
             secret: (Math.random().toString(16).split('.')[1])
         }
 
-        
-
         const baseUrl = `http://localhost:${settings.http.port}`
 
         before(() => {
@@ -66,9 +71,9 @@ describe("Morrigan server", async () => {
             assert.equal(server._state, 0)
         })
 
-        it("Should have 'state' set to 'ininitialized' (1) after setup method finishes.", async (done) => {
+        it("Should have 'state' set to 'ininitialized' (1) after setup method finishes.", (done) => {
             assert.strictEqual(server._state, 0)
-            await server.setup(() => {
+            server.setup(() => {
                 assert.equal(server._state, 1)
                 assert(!flags.error)
                 assert(flags.initialized)
@@ -155,9 +160,8 @@ describe("Morrigan server", async () => {
                     assert.strictEqual(typeof data, 'object', `Expected a JSON object to be retruend by the server, found '${typeof data}'.`)
                     SwaggerParser.validate(data, (err, api) => {
                         if (err) {
-                            console.log(err)
+                            assert.fail(err)
                         }
-                        assert(!err)
                         assert(api)
                         done()
                     })
