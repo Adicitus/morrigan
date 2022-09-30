@@ -13,13 +13,14 @@ const Logger =  require('./modules/Logger')
 const serverStates = {
     error: -1,
     instanced: 0,
-    initialized: 1,
-    starting: 2,
-    starting_connected: 3,
-    started: 4,
-    ready: 5,
-    stopping: 6,
-    stopped: 7
+    initializing: 1,
+    initialized: 2,
+    starting: 3,
+    starting_connected: 4,
+    started: 5,
+    ready: 6,
+    stopping: 7,
+    stopped: 8
 }
 
 /**
@@ -129,6 +130,16 @@ class Morrigan {
      */
     async setup(callback) {
 
+        if (this._state >= serverStates.initialized) {
+            throw "Call to .setup rejected: Server is already initialized."
+        }
+
+        if (this._state === serverStates.initializing) {
+            throw "Call to .setup rejected: Server is already initializing."
+        }
+
+        this._state = serverStates.initializing
+
         const serverSettings = this.settings
         const app = this.app = express()
 
@@ -173,8 +184,8 @@ class Morrigan {
         })
 
         let stateDir = serverSettings.stateDir || '/morrigan.server/state'
-        this._rootStore = await StateStore(stateDir)
         log(`Reading server state (looking in '${stateDir}')...`)
+        this._rootStore = await StateStore(stateDir)
         this.serverInfo = await (require('./server.info').build(this._rootStore))
         log('Finished reading server state.')
         log(`Running Morrigan server version ${this.serverInfo.version}.`)
@@ -254,7 +265,11 @@ class Morrigan {
             let m = component.module
             if (m.getMiddleware) {
                 log(`Adding middleware from '${component.name}'...`)
-                app.use(m.getMiddleware())
+                try {
+                    app.use(m.getMiddleware())
+                } catch (e) {
+                    log(`An unexpected exception occurred while adding middleware from '${component.name}': ${e}`)
+                }
             }
         })
 
@@ -274,18 +289,27 @@ class Morrigan {
      * If the 'setup' method has not been called, this method will attempt to call it in order to initialize the server.
      */
     async start(callback) {
+
+        const self = this
+
         if (this._state < serverStates.initialized) {
-            try {
-                this.log(`'start' method called, but server is not in an initialized state. Attempting to initialize...`)
-                await this.setup()
-            } catch(e) {
-                this.log(`Failed to initialize: ${JSON.stringify(e)}`)
-                return
+            if (this._state == serverStates.initializing) {
+                // Wait for server initialization to finish:
+                await new Promise(resolve => {
+                    self.on('initialized', () => {
+                        resolve()
+                    })
+                })
+            } else {
+                try {
+                    this.log(`'start' method called, but server is not in an initialized state. Attempting to initialize...`)
+                    await this.setup()
+                } catch(e) {
+                    this.log(`Failed to initialize: ${JSON.stringify(e)}`)
+                    return
+                }
             }
         }
-
-        this._state = serverStates.starting
-        this._emitEvent('starting')
 
         const serverInfo = this.serverInfo
         const serverSettings = this.settings
@@ -295,7 +319,9 @@ class Morrigan {
         const server = this.server
         const port = this.port
 
-        const self = this
+        this._state = serverStates.starting
+        this._emitEvent('starting')
+        log('Starting server...')
 
         if (!serverSettings.database) {
             log("No 'database' section specified in the server settings, unable to connect to database. Quitting.", 'error')
