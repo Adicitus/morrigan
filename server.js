@@ -43,6 +43,7 @@ class Morrigan {
 
     _eventHandlers = {
         error: [],
+        initializing: [],
         initialized: [],
         starting: [],
         starting_connected: [],
@@ -139,6 +140,7 @@ class Morrigan {
         }
 
         this._state = serverStates.initializing
+        this._emitEvent('initializing')
 
         const serverSettings = this.settings
         const app = this.app = express()
@@ -272,7 +274,6 @@ class Morrigan {
                 }
             }
         })
-
         this._state = serverStates.initialized
         this._emitEvent('initialized')
 
@@ -756,5 +757,8 @@ class Morrigan {
         return doc
     }
 }
+
+
+Object.keys(serverStates).forEach(k => Morrigan[k.toUpperCase()] = serverStates[k])
 
 module.exports = Morrigan
