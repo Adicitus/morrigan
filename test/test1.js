@@ -115,7 +115,7 @@ describe("Morrigan server", async () => {
             assert(component.module.flags.setupCalled)
         })
 
-        it("Should provide 'db', 'info' and 'log' through the 'environment' object", () => {
+        it("Should provide 'db', 'info', 'state' and 'log' through the 'environment' object", () => {
             assert.strictEqual(server._state, Morrigan.READY)
 
             let namespace = Object.keys(settings.components)[0]
@@ -124,6 +124,7 @@ describe("Morrigan server", async () => {
             assert(component.module.flags.databaseProvided)
             assert(component.module.flags.serverInfoProvided)
             assert(component.module.flags.logFunctionProvided)
+            assert(component.module.flags.stateStoreProvided)
         })
 
         it("Should allow the component to retrieve  collections.", () => {

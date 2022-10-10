@@ -4,6 +4,7 @@ const flags = {
     collectionRetrievable: false,
     serverInfoProvided: false,
     logFunctionProvided: false,
+    stateStoreProvided: false,
     onShutdownCalled: false,
 }
 
@@ -22,6 +23,8 @@ module.exports = {
         flags.serverInfoProvided = typeof environment.info === 'object'
 
         flags.logFunctionProvided = typeof environment.log === 'function'
+
+        flags.stateStoreProvided = typeof environment.state === 'object'
 
         let collection = await environment.db.collection('morrigan.server.debug.testComponent')
         flags.collectionRetrievable = typeof collection === 'object'

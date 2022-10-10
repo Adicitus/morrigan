@@ -1,12 +1,12 @@
 {
   "name": "@adicitus/morrigan.server",
-  "version": "0.9.2",
+  "version": "0.9.3",
   "description": "Morrigan management system server.",
   "main": "server.js",
   "dependencies": {
     "@adicitus/morrigan.authentication.password": "^1.0.0",
     "@adicitus/morrigan.components.authentication": "^1.0.2",
-    "@adicitus/morrigan.components.core": "^1.0.0",
+    "@adicitus/morrigan.components.core": "^2.0.0",
     "@adicitus/morrigan.server.providers.capability": "^0.1.1",
     "@adicitus/morrigan.server.providers.client": "^1.0.4",
     "@adicitus/morrigan.server.providers.connection": "^3.0.0",
