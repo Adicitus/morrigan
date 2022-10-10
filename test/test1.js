@@ -35,6 +35,7 @@ describe("Morrigan server", async () => {
             },
 
             logger: {
+                console: false,
                 level: 'silly',
                 logDir: `${__dirname}/data/log`
             },

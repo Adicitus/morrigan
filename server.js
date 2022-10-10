@@ -372,7 +372,7 @@ class Morrigan {
 
                 log('Setting up components...')
                 let promises = []
-                components.forEach(c => {
+                components.forEach(async c => {
                     let router = express.Router()
                     app.use(c.route, router)
                     router._morrigan = { route: c.route }
@@ -380,7 +380,7 @@ class Morrigan {
                     c.specification.endpointUrl = environment.baseUrl + c.route
                     log(`Starting setup of component '${c.name}' (${c.specification.endpointUrl})`, 'info')
                     let env = Object.assign({}, environment)
-                    env.state = this._rootStore.getStore(c.name, 'delegate')
+                    env.state = await this._rootStore.getStore(c.name, 'delegate')
                     let p = c.module.setup(c.name, c.specification, router, env)
                     promises.push(p)
                 })

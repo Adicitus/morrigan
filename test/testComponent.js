@@ -24,7 +24,7 @@ module.exports = {
 
         flags.logFunctionProvided = typeof environment.log === 'function'
 
-        flags.stateStoreProvided = typeof environment.state === 'object'
+        flags.stateStoreProvided = typeof environment.state === 'object' && typeof environment.state.getStore === 'function' && typeof environment.state.get === 'function' && typeof environment.state.set === 'function' && typeof environment.state.remove === 'function'
 
         let collection = await environment.db.collection('morrigan.server.debug.testComponent')
         flags.collectionRetrievable = typeof collection === 'object'
