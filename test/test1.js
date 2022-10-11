@@ -2,6 +2,7 @@ const fs = require('fs')
 const Morrigan = require('../server.js')
 const SwaggerParser = require('@apidevtools/swagger-parser')
 const testComponent = require('./testComponent')
+const errorComponent = require('./errorComponent')
 const assert = require('assert')
 
 const dataDir = `${__dirname}/data`
@@ -48,8 +49,15 @@ describe("Morrigan server", async () => {
             components: {}
         }
 
+        // Well-behaved component:
         settings.components[(Math.random().toString(16).split('.')[1])] = {
             module: testComponent,
+            secret: (Math.random().toString(16).split('.')[1])
+        }
+        
+        // Landmine:
+        settings.components[(Math.random().toString(16).split('.')[1])] = {
+            module: errorComponent,
             secret: (Math.random().toString(16).split('.')[1])
         }
 
@@ -71,13 +79,13 @@ describe("Morrigan server", async () => {
         })
 
         it(`Should have 'state' set to 'instanced' (${Morrigan.INSTANCED})`, async () => {
-            assert.equal(server._state, Morrigan.INSTANCED)
+            assert.equal(server.getState(), Morrigan.INSTANCED)
         })
 
         it(`Should have 'state' set to 'ininitialized' (${Morrigan.INITIALIZED}) after setup method finishes.`, done => {
-            assert.strictEqual(server._state, Morrigan.INSTANCED)
+            assert.strictEqual(server.getState(), Morrigan.INSTANCED)
             server.setup(() => {
-                assert.strictEqual(server._state, Morrigan.INITIALIZED)
+                assert.strictEqual(server.getState(), Morrigan.INITIALIZED)
                 assert(!flags.error)
                 assert(flags.initializing)
                 assert(flags.initialized)
@@ -92,9 +100,9 @@ describe("Morrigan server", async () => {
 
 
         it(`Should have 'state' progress through ${Morrigan.STARTING}-${Morrigan.READY} (starting -> ready) once the start method has finished.`, (done) => {
-            assert.strictEqual(server._state, Morrigan.INITIALIZED)
+            assert.strictEqual(server.getState(), Morrigan.INITIALIZED)
             server.start(() => {
-                assert.strictEqual(server._state, Morrigan.READY)
+                assert.strictEqual(server.getState(), Morrigan.READY)
                 assert(!flags.error)
                 assert(flags.initializing)
                 assert(flags.initialized)
@@ -108,7 +116,7 @@ describe("Morrigan server", async () => {
         })
 
         it("Should have called 'setup' method on components once state is 'ready'", () => {
-            assert.strictEqual(server._state, Morrigan.READY)
+            assert.strictEqual(server.getState(), Morrigan.READY)
 
             let namespace = Object.keys(settings.components)[0]
             let component = settings.components[namespace]
@@ -117,7 +125,7 @@ describe("Morrigan server", async () => {
         })
 
         it("Should provide 'db', 'info', 'state' and 'log' through the 'environment' object", () => {
-            assert.strictEqual(server._state, Morrigan.READY)
+            assert.strictEqual(server.getState(), Morrigan.READY)
 
             let namespace = Object.keys(settings.components)[0]
             let component = settings.components[namespace]
@@ -129,7 +137,7 @@ describe("Morrigan server", async () => {
         })
 
         it("Should allow the component to retrieve  collections.", () => {
-            assert.strictEqual(server._state, Morrigan.READY)
+            assert.strictEqual(server.getState(), Morrigan.READY)
 
             let namespace = Object.keys(settings.components)[0]
             let component = settings.components[namespace]
@@ -138,7 +146,7 @@ describe("Morrigan server", async () => {
         })
 
         it(`Should listen on the specified port (${settings.http.port}) when it is ready`, (done) => {
-            assert.strictEqual(server._state, Morrigan.READY)
+            assert.strictEqual(server.getState(), Morrigan.READY)
 
             let http = require('http')
 
@@ -150,7 +158,7 @@ describe("Morrigan server", async () => {
         })
 
         it("Should publish a valid OpenAPI specification object at '/api-docs'", (done) => {
-            assert.strictEqual(server._state, Morrigan.READY)
+            assert.strictEqual(server.getState(), Morrigan.READY)
 
             let apiUrl  = `${baseUrl}/api-docs`
 
@@ -176,7 +184,7 @@ describe("Morrigan server", async () => {
         })
 
         it("Should make endpoints registered by components available under their ComponentSpec namespace ('/api/CcomponentSpec name>')", (done) => {
-            assert.strictEqual(server._state, Morrigan.READY)
+            assert.strictEqual(server.getState(), Morrigan.READY)
 
             let namespace = Object.keys(settings.components)[0]
 
@@ -198,9 +206,9 @@ describe("Morrigan server", async () => {
         })
 
         it(`Should have 'state' progress through ${Morrigan.STOPPING}-${Morrigan.STOPPED} (stopping -> stopped) once stop method has finished`, (done) => {
-            assert.strictEqual(server._state, Morrigan.READY)
+            assert.strictEqual(server.getState(), Morrigan.READY)
             server.stop('LifeCycle tests finished', () => {
-                assert.strictEqual(server._state, Morrigan.STOPPED)
+                assert.strictEqual(server.getState(), Morrigan.STOPPED)
                 assert(!flags.error)
                 assert(flags.initialized)
                 assert(flags.starting)
@@ -213,7 +221,7 @@ describe("Morrigan server", async () => {
         })
 
         it("Should have called 'onShutdown' method on components once state is 'stopped'", () => {
-            assert.strictEqual(server._state, Morrigan.STOPPED)
+            assert.strictEqual(server.getState(), Morrigan.STOPPED)
 
             let namespace = Object.keys(settings.components)[0]
             let component = settings.components[namespace]
@@ -223,7 +231,7 @@ describe("Morrigan server", async () => {
         })
 
         it(`Should no longer be listening for requests on the given port (${settings.http.port}) when stopped`, (done) => {
-            assert.strictEqual(server._state, Morrigan.STOPPED)
+            assert.strictEqual(server.getState(), Morrigan.STOPPED)
 
             let baseUrl = `http://localhost:${settings.http.port}`
 
@@ -241,6 +249,12 @@ describe("Morrigan server", async () => {
             
             req.end()
             
+        })
+        
+        it("Should handle uncaught exceptions in component setup methods", async () => {
+            await server.start()
+            assert.strictEqual(server.getState(), Morrigan.READY)
+            await server.stop()
         })
 
         after(async () => {

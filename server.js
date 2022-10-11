@@ -122,6 +122,14 @@ class Morrigan {
     }
 
     /**
+     * Retrieves the current state of the server.
+     * @returns Current state
+     */
+    getState() {
+        return this._state
+    }
+
+    /**
      * Performs pre-start configuration steps.
      * 
      * - Loads and sets up logging module.
@@ -306,7 +314,9 @@ class Morrigan {
                     this.log(`'start' method called, but server is not in an initialized state. Attempting to initialize...`)
                     await this.setup()
                 } catch(e) {
+                    this._state = serverStates.error
                     this.log(`Failed to initialize: ${JSON.stringify(e)}`)
+                    this.error = e
                     return
                 }
             }
@@ -339,25 +349,54 @@ class Morrigan {
             log("No 'dbname' specified in 'database' section of the server settings, server records will be stored in the database named 'test'.", 'warn')
             dbname = 'test'
         }
+        
+        const environment = {
+            log,
+            info: serverInfo
+        }
 
-        // Establish connection to MongoDB:
+        log("Establish connection to MongoDB...")
         var database = null
         const mongoClient = require('mongodb').MongoClient
-        mongoClient.connect(serverSettings.database.connectionString, { useUnifiedTopology: true }).then(async client => {
+        let connectionPromise = mongoClient.connect(serverSettings.database.connectionString, { useUnifiedTopology: true }).then(async client => {
             this._state = serverStates.starting_connected
             this._emitEvent('starting_connected')
 
             log('MongoDB server connected.')
             log(`Using DB '${serverSettings.database.dbname}'.`)
-            database = client.db(serverSettings.database.dbname)
-
-
-            const environment = {
-                db: database,
-                info: serverInfo,
-                log: log
+            try {
+                database = client.db(serverSettings.database.dbname)
+                environment.db = database
+            } catch(e) {
+                log(`An error occurred while getting the databse ('${serverSettings.database.dbname}'): ${e}`, 'error')
+                throw new Error(`An error occurred while trying to access database: ('${serverSettings.database.dbname}')`, { cause: e })
             }
 
+        })
+        
+        connectionPromise.catch(err => {
+            this._state = serverStates.error
+            this._emitEvent('error', err)
+
+            log('Error while connecting to DB:', 'error')
+            log(err)
+            if (err.stack) {
+                log(err.stack)
+            }
+
+            this.error = err
+            typeof callback === 'function' && callback(err)
+        })
+
+        await connectionPromise
+
+        if (environment.db === undefined) {
+            log(`Connection to DB failed: ${this.error}`, 'error')
+            return
+        }
+
+        log("Settings up HTTP(S) listener...")
+        let listenPromise = new Promise(resolveHttp => {
             server.listen(port, async () => {
                 log(`Listening on port ${port}.`)
 
@@ -370,121 +409,132 @@ class Morrigan {
     
                 log(`API base URL: ${environment.baseUrl}`, 'info')
 
-                log('Setting up components...')
-                let promises = []
-                components.forEach(async c => {
-                    let router = express.Router()
-                    app.use(c.route, router)
-                    router._morrigan = { route: c.route }
+                resolveHttp()
+            })
+        })
 
-                    c.specification.endpointUrl = environment.baseUrl + c.route
-                    log(`Starting setup of component '${c.name}' (${c.specification.endpointUrl})`, 'info')
-                    let env = Object.assign({}, environment)
-                    env.state = await this._rootStore.getStore(c.name, 'delegate')
-                    let p = c.module.setup(c.name, c.specification, router, env)
-                    promises.push(p)
-                })
-                await Promise.all(promises)
-                log ('Component setup Finished.')
-                
+        listenPromise.catch(err => {
+            this._state = serverStates.error
+            this.error = err
+            environment.log(`An error occurred while starting HTTP listener: ${err.message}`, 'error')
+            environment.log(err, 'error')
+            typeof callback === 'function' && callback(err)
+        })
 
-                app.get('/api-docs', (req, res) => {
+        await listenPromise
 
-                    let routes = this._buildApiDoc()
+        if (environment.baseUrl === undefined) {
+            log(`Failed to start HTTP listener: ${this.error}`)
+            return
+        }
 
-                    res.setHeader('Content-Type', 'application/json')
-                    res.end(JSON.stringify(routes))
-                })
+        log('Setting up components...')
+        let promises = []
+        components.forEach(async c => {
+            let router = express.Router()
+            app.use(c.route, router)
+            router._morrigan = { route: c.route }
 
-                app.use('/api-docs/view', swaggerUi.serve, swaggerUi.setup(null, {
-                    swaggerOptions: {
-                        url: '/api-docs'
+            c.specification.endpointUrl = environment.baseUrl + c.route
+            log(`Starting setup of component '${c.name}' (${c.specification.endpointUrl})`, 'info')
+            let env = Object.assign({}, environment)
+            env.state = await this._rootStore.getStore(c.name, 'delegate')
+            let p = c.module.setup(c.name, c.specification, router, env).catch(err => {
+                log(`An unhandled exception occured in component ${c.name}: ${err}`, 'error')
+                c.error = err
+            })
+            promises.push(p)
+        })
+        await Promise.all(promises)
+        log ('Component setup Finished.')
+        
+        log("Setting up OpenAPI endpoint (@ '/api-docs')...")
+        app.get('/api-docs', (req, res) => {
+
+            let routes = this._buildApiDoc()
+
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify(routes))
+        })
+        log("OpenAPI setup finished.")
+
+        log("Setting up SwaggerUI (@ '/api-docs/view')")
+        app.use('/api-docs/view', swaggerUi.serve, swaggerUi.setup(null, {
+            swaggerOptions: {
+                url: '/api-docs'
+            }
+        }))
+        log("SwaggerUI setup finished.")
+        
+
+        log('Setting up instance reporting...')
+
+        const instances = database.collection('morrigan.instances')
+        this._instances = instances
+
+        const selector = {id: serverInfo.id}
+        let remoteRecord = await instances.findOne(selector)
+
+        const serverRecord = {
+            id: serverInfo.id,
+            components: [],
+            state: serverInfo,
+            live: true,
+            checkInTime: DateTime.now().toISO()
+        }
+
+        this.components.forEach(c => {
+            let c2 = {}
+
+            Object.keys(c).forEach(k => {
+                if (k === 'module') {
+                    // Skip the loaded module.
+                    return
+                }
+
+                if (k === 'specification') {
+                    // Extract module spec and discard the rest to avoid trouble when storing the record:
+                    let m = c[k].module
+                    switch (typeof m) {
+                        case 'function':
+                        case 'object':
+                            c2.module = 'anonymous'
+                            break
+                        case 'string':
+                            c2.module = m
+                            break
                     }
-                }))
-                
-
-                log('Setting up instance reporting...')
-
-                const instances = database.collection('morrigan.instances')
-                this._instances = instances
-
-                const selector = {id: serverInfo.id}
-                let remoteRecord = await instances.findOne(selector)
-
-                const serverRecord = {
-                    id: serverInfo.id,
-                    components: [],
-                    state: serverInfo,
-                    live: true,
-                    checkInTime: DateTime.now().toISO()
+                    return
                 }
 
-                this.components.forEach(c => {
-                    let c2 = {}
-
-                    Object.keys(c).forEach(k => {
-                        if (k === 'module') {
-                            // Skip the loaded module.
-                            return
-                        }
-
-                        if (k === 'specification') {
-                            // Extract module spec and discard the rest to avoid trouble when storing the record:
-                            let m = c[k].module
-                            switch (typeof m) {
-                                case 'function':
-                                case 'object':
-                                    c2.module = 'anonymous'
-                                    break
-                                case 'string':
-                                    c2.module = m
-                                    break
-                            }
-                            return
-                        }
-
-                        c2[k] = c[k]
-                    })
-
-                    serverRecord.components.push(c2)
-                })
-
-                this._serverRecord = serverRecord
-
-                if (remoteRecord == null) {
-                    log('Registering instance...')
-                    await instances.insertOne(serverRecord)
-                } else {
-                    log('Updating instance record...')
-                    await instances.replaceOne(selector, serverRecord)
-                }
-
-                this._updateInterval = setInterval(async () => {
-                    serverRecord.checkInTime = DateTime.now().toISO()
-                    instances.replaceOne(selector, serverRecord)
-                }, 30000)
-
-                log('Finished instance reporting setup.')
-
-                self._state = serverStates.ready
-                this._emitEvent('ready')
-
-                typeof callback === 'function' && callback()
+                c2[k] = c[k]
             })
 
-
-        }).catch(err => {
-            this._state = serverStates.error
-            this._emitEvent('error', err)
-
-            log('Error while connecting to DB:')
-            log(err)
-            if (err.stack) {
-                log(err.stack)
-            }
-
-            typeof callback === 'function' && callback()
+            serverRecord.components.push(c2)
         })
+
+        this._serverRecord = serverRecord
+
+        if (remoteRecord == null) {
+            log('Registering instance...')
+            await instances.insertOne(serverRecord)
+        } else {
+            log('Updating instance record...')
+            await instances.replaceOne(selector, serverRecord)
+        }
+
+        this._updateInterval = setInterval(async () => {
+            serverRecord.checkInTime = DateTime.now().toISO()
+            instances.replaceOne(selector, serverRecord)
+        }, 30000)
+
+        log('Finished instance reporting setup.')
+
+        log("Server is READY.")
+        self._state = serverStates.ready
+        this._emitEvent('ready')
+
+        typeof callback === 'function' && callback()
     }
 
     /**
