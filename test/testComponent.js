@@ -15,6 +15,7 @@ module.exports = {
     flags,
 
     setup: async (name, spec, router, environment) => {
+        console.log(`.setup on ${__filename} started`)
 
         flags.setupCalled = true
 
@@ -45,10 +46,18 @@ module.exports = {
         }
 
         router.get('/', handler)
+        console.log(`.setup on ${__filename} finished`)
     },
 
-    onShutdown: () => {
+    onShutdown: async () => {
+
+        console.log(`.onShutdown on ${__filename} started`)
+
+        // Throw in a timeout to verify that the server waits for onShutdown to finish before quitting.
+        await new Promise(resolve => setTimeout(resolve, 1000))
+
         flags.onShutdownCalled = true
+        console.log(`.onShutdown on ${__filename} finished`)
     },
 
     openapi: {

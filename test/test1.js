@@ -3,6 +3,7 @@ const Morrigan = require('../server.js')
 const SwaggerParser = require('@apidevtools/swagger-parser')
 const testComponent = require('./testComponent')
 const errorComponent = require('./errorComponent')
+const errorComponentSync = require('./errorComponent')
 const assert = require('assert')
 
 const dataDir = `${__dirname}/data`
@@ -36,7 +37,7 @@ describe("Morrigan server", async () => {
             },
 
             logger: {
-                console: false,
+                console: true,
                 level: 'silly',
                 logDir: `${__dirname}/data/log`
             },
@@ -56,8 +57,16 @@ describe("Morrigan server", async () => {
         }
         
         // Landmine:
-        settings.components[(Math.random().toString(16).split('.')[1])] = {
+        landmineName = (Math.random().toString(16).split('.')[1])
+        settings.components[landmineName] = {
             module: errorComponent,
+            secret: (Math.random().toString(16).split('.')[1])
+        }
+        
+        // Landmine Sync:
+        landmineSyncName = (Math.random().toString(16).split('.')[1])
+        settings.components[landmineSyncName] = {
+            module: errorComponentSync,
             secret: (Math.random().toString(16).split('.')[1])
         }
 
@@ -136,7 +145,7 @@ describe("Morrigan server", async () => {
             assert(component.module.flags.stateStoreProvided)
         })
 
-        it("Should allow the component to retrieve  collections.", () => {
+        it("Should allow the component to retrieve collections.", () => {
             assert.strictEqual(server.getState(), Morrigan.READY)
 
             let namespace = Object.keys(settings.components)[0]
@@ -227,7 +236,6 @@ describe("Morrigan server", async () => {
             let component = settings.components[namespace]
 
             assert(component.module.flags.onShutdownCalled)
-            
         })
 
         it(`Should no longer be listening for requests on the given port (${settings.http.port}) when stopped`, (done) => {
@@ -251,10 +259,17 @@ describe("Morrigan server", async () => {
             
         })
         
-        it("Should handle uncaught exceptions in component setup methods", async () => {
+        it("Should handle uncaught exceptions from component .setup methods", async () => {
             await server.start()
             assert.strictEqual(server.getState(), Morrigan.READY)
+            assert.ok(server._errors[landmineName]['setup'])
+            assert.ok(server._errors[landmineSyncName]['setup'])
+        })
+
+        it("Should handle uncaught exceptions from component .onShutdown methods", async () => {
             await server.stop()
+            assert.ok(server._errors[landmineName]['onShutdown'])
+            assert.ok(server._errors[landmineSyncName]['onShutdown'])
         })
 
         after(async () => {

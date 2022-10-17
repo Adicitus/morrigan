@@ -428,6 +428,21 @@ class Morrigan {
             return
         }
 
+        await this._executeComponentHooks('setup', async (c) => {
+            
+            let router = express.Router()
+            app.use(c.route, router)
+            router._morrigan = { route: c.route }
+
+            c.specification.endpointUrl = environment.baseUrl + c.route
+            log(`Building environment for component '${c.name}' (${c.specification.endpointUrl})`, 'info')
+            let env = Object.assign({}, environment)
+            env.state = await this._rootStore.getStore(c.name, 'delegate')
+
+            return [c.name, c.specification, router, env]
+        })
+
+/*
         log('Setting up components...')
         let promises = []
         components.forEach(async c => {
@@ -439,15 +454,23 @@ class Morrigan {
             log(`Starting setup of component '${c.name}' (${c.specification.endpointUrl})`, 'info')
             let env = Object.assign({}, environment)
             env.state = await this._rootStore.getStore(c.name, 'delegate')
-            let p = c.module.setup(c.name, c.specification, router, env).catch(err => {
-                log(`An unhandled exception occured in component ${c.name}: ${err}`, 'error')
-                c.error = err
-            })
-            promises.push(p)
+            try {
+                let self = this
+                let p = c.module.setup(c.name, c.specification, router, env).catch(err => {
+                    log(`An unhandled exception occured in .setup on component ${c.name}: ${err}`, 'error')
+                    self._handleComponentError('setup', c, err)
+                })
+                promises.push(p)
+            } catch (e) {
+                log(`An unhandled exception occured while invoking .setup on component ${c.name}: ${e}`, 'error')
+                this._handleComponentError('setup', c, e)
+            }
         })
         await Promise.all(promises)
         log ('Component setup Finished.')
-        
+
+*/
+
         log("Setting up OpenAPI endpoint (@ '/api-docs')...")
         app.get('/api-docs', (req, res) => {
 
@@ -557,45 +580,113 @@ class Morrigan {
         this._state = serverStates.stopping
         this._emitEvent('stopping')
 
-        const l = this.log
+        await this._executeComponentHooks('onShutdown', (c) => {
+            return [ stopReason ]
+        })
 
-        l('Calling onShutdown methods on components...')
-        let promises = []
-        this.components.forEach(c => {
-            if (c.module.onShutdown) {
-                promises.push(c.module.onShutdown(stopReason))
+        this.log('Stopping HTTP server instance...')
+        await new Promise(resolve => {
+            this.server.close(resolve)
+        })
+        this.log('HTTP server finished shutting down.')
+
+        this.log('Stopping server record update interval...')
+        clearInterval(this._updateInterval)
+        
+        this.log('Updating server record...')
+        const selector = {id: this.serverInfo.id}
+        const record = this._serverRecord
+        record.checkInTime = DateTime.now().toISO()
+        record.live = false
+        record.stopReason = stopReason
+        await this._instances.replaceOne(selector, record).then(() => {
+            this.log('Instance record updated.')
+        }).catch((err) => {
+            this.log('Failed to update the instance record.', 'error')
+            this.log(err)
+        })
+
+        this._state = serverStates.stopped
+        this._emitEvent('stopped')
+        typeof callback === 'function' && callback()
+        this.log('Bye!')
+    }
+
+    async _executeComponentHooks(hookName, hookArgsCallback) {
+
+        this.log(`Calling .${hookName} methods on components...`)
+        var promises = []
+        for(const i in this.components) {
+            const component = this.components[i]
+            if (typeof component.module[hookName] === 'function') {
+                try {
+                    let hookArgs = []
+                    let promise = null
+
+                    if (typeof hookArgsCallback === 'function') {
+                        let p = null
+                        switch (hookArgsCallback.constructor.name) {
+                            case 'AsyncFunction':
+                                p = hookArgsCallback(component)
+                                break
+                            case 'Function':
+                                p = new Promise(resolve => {
+                                    resolve(hookArgsCallback(component))
+                                })
+                                break
+                        }
+                        try {
+                            hookArgs = await p
+                        } catch (err) {
+                            this.log(`An error occurred while preparing arguments for hook '${hookName}' on component '${component.name}': ${err}`)
+                            hookArgs = []
+                        }
+                    }
+
+                    switch(component.module[hookName].constructor.name) {
+                        case 'AsyncFunction':
+                            promise = component.module[hookName](...hookArgs)
+                            break
+                        case 'Function':
+                            promise = new Promise(resolve => {
+                                component.module[hookName](...hookArgs)
+                                resolve()
+                            })
+                            break
+                    }
+                    let self = this
+                    promise.catch(err => {
+                        self._handleComponentError(hookName, component, err)
+
+                    })
+                    promises.push(promise)
+                } catch (err) {
+                    this._handleComponentError(hookName, component, err)
+                    this.log(`An unhandled exception was thrown when calling .${hookName} on component '${component.name}'`, 'error')
+                    this.log(err, 'error')
+                }
             }
-        })
-        l('Waiting for components to finish shutting down...')
-        await Promise.all(promises)
-        l('Components finished shutting down.')
+        }
+        this.log('Waiting for component hooks to finish...')
+        await Promise.allSettled(promises)
+        this.log('Component hooks finished.')
+    }
 
-        l('Stopping HTTP server instance...')
-        this.server.close(async () => {
+    _handleComponentError(key, componentRecord, error) {
+        if (!this._errors) {
+            this._errors = {}
+        }
 
-            l('HTTP server finished shutting down.')
+        if (!this._errors[componentRecord.name]) {
+            this._errors[componentRecord.name] = {}
+        }
 
-            l('Stopping server record update interval...')
-            clearInterval(this._updateInterval)
-            
-            const selector = {id: this.serverInfo.id}
-            l('Updating server record...')
-            const record = this._serverRecord
-            record.checkInTime = DateTime.now().toISO()
-            record.live = false
-            record.stopReason = stopReason
-            this._instances.replaceOne(selector, record).then(() => {
-                l('Instance record updated.')
-            }).catch((err) => {
-                l('Failed to update the instance record.', 'error')
-                l(err)
-            }).finally(() => {
-                this._state = serverStates.stopped
-                this._emitEvent('stopped')
-                l('Bye!')
-                typeof callback === 'function' && callback()
-            })
-        })
+        if (!this._errors[componentRecord.name][key]) {
+            this._errors[componentRecord.name][key] = []
+        }
+
+        this._lastError = error
+        this._errors[componentRecord.name][key].push(error)
     }
 
     _buildApiDoc() {
