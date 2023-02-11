@@ -8,7 +8,7 @@ const swaggerUi = require('swagger-ui-express')
 
 const StateStore = require('@adicitus/morrigan.utils.statestore')
 
-const Logger =  require('./modules/Logger')
+const Logger =  require(`${__dirname}/logger`)
 
 const serverStates = {
     error: -1,

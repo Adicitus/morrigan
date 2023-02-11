@@ -1,5 +1,5 @@
 const fs = require('fs')
-const Morrigan = require('../server.js')
+const Morrigan = require('../server')
 const SwaggerParser = require('@apidevtools/swagger-parser')
 const testComponent = require('./testComponent')
 const errorComponent = require('./errorComponent')
