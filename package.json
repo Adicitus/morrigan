@@ -1,6 +1,6 @@
 {
   "name": "@adicitus/morrigan.server",
-  "version": "0.9.7",
+  "version": "0.9.8",
   "description": "Morrigan management system server.",
   "main": "server.js",
   "dependencies": {
@@ -42,6 +42,7 @@
   "homepage": "https://github.com/Adicitus/morrigan#readme",
   "devDependencies": {
     "@apidevtools/swagger-parser": "^10.1.0",
-    "mocha": "^10.0.0"
+    "mocha": "^10.0.0",
+    "mongodb-memory-server": "^8.11.4"
   }
 }

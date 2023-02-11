@@ -13,7 +13,15 @@ if (fs.existsSync(dataDir)) {
 }
 
 describe("Morrigan server", async () => {
+
+    var mongoDbServer = null
    
+    before(async () => {
+        // Instantiation of a in-memory MOngoDB server to use for testing:
+        const { MongoMemoryServer } = await import('mongodb-memory-server')
+        mongoDbServer = await MongoMemoryServer.create()
+    })
+
     describe("Lifecycle", () => {
 
         let server = null
@@ -43,7 +51,7 @@ describe("Morrigan server", async () => {
             },
 
             database: {
-                connectionString: "mongodb://127.0.0.1:27017",
+                connectionString: 'mongodb://127.0.0.1:27017', // Default value, will be overwritten in the 'before' clause
                 dbname: "morrigan-server-test"
             },
 
@@ -73,6 +81,7 @@ describe("Morrigan server", async () => {
         const baseUrl = `http://localhost:${settings.http.port}`
 
         before(() => {
+            settings.database.connectionString = mongoDbServer.getUri()
 
             server = new Morrigan(settings)
 
@@ -277,5 +286,10 @@ describe("Morrigan server", async () => {
             await server.stop()
             delete server
         })
+    })
+
+    after(async () => {
+        // Attempt to stop the server gracefully:
+        await mongoDbServer.stop()
     })
 })
