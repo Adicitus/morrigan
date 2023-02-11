@@ -428,6 +428,7 @@ class Morrigan {
             return
         }
 
+        // Setup all of the loaded components:
         await this._executeComponentHooks('setup', async (c) => {
             
             let router = express.Router()
@@ -441,35 +442,6 @@ class Morrigan {
 
             return [c.name, c.specification, router, env]
         })
-
-/*
-        log('Setting up components...')
-        let promises = []
-        components.forEach(async c => {
-            let router = express.Router()
-            app.use(c.route, router)
-            router._morrigan = { route: c.route }
-
-            c.specification.endpointUrl = environment.baseUrl + c.route
-            log(`Starting setup of component '${c.name}' (${c.specification.endpointUrl})`, 'info')
-            let env = Object.assign({}, environment)
-            env.state = await this._rootStore.getStore(c.name, 'delegate')
-            try {
-                let self = this
-                let p = c.module.setup(c.name, c.specification, router, env).catch(err => {
-                    log(`An unhandled exception occured in .setup on component ${c.name}: ${err}`, 'error')
-                    self._handleComponentError('setup', c, err)
-                })
-                promises.push(p)
-            } catch (e) {
-                log(`An unhandled exception occured while invoking .setup on component ${c.name}: ${e}`, 'error')
-                this._handleComponentError('setup', c, e)
-            }
-        })
-        await Promise.all(promises)
-        log ('Component setup Finished.')
-
-*/
 
         log("Setting up OpenAPI endpoint (@ '/api-docs')...")
         app.get('/api-docs', (req, res) => {
@@ -612,6 +584,14 @@ class Morrigan {
         this.log('Bye!')
     }
 
+    /**
+     * Helper function to call a specified method ('hook') on all the loaded components.
+     * 
+     * To allow dynamic generation of arguments, this function takes a function as it's second argument.
+     * 
+     * @param {string} hookName Name of the hook method to call.
+     * @param {function} hookArgsCallback Function used to generate an array of arguments that should be passed to the method.
+     */
     async _executeComponentHooks(hookName, hookArgsCallback) {
 
         this.log(`Calling .${hookName} methods on components...`)
