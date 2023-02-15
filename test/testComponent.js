@@ -1,6 +1,7 @@
 const flags = {
     setupCalled: false,
-    databaseProvided: false,
+    datastoreProvided: false,
+    datastoreIsDelegated: false,
     collectionRetrievable: false,
     serverInfoProvided: false,
     logFunctionProvided: false,
@@ -19,7 +20,9 @@ module.exports = {
 
         flags.setupCalled = true
 
-        flags.databaseProvided = typeof environment.db === 'object'
+        flags.datastoreProvided = typeof environment.db === 'object'
+
+        flags.datastoreIsDelegated = typeof environment.db.discard === 'undefined' && typeof environment.db.getDataStore === 'function'
 
         flags.serverInfoProvided = typeof environment.info === 'object'
 

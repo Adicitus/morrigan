@@ -7,6 +7,7 @@ const bodyParser = require('body-parser')
 const swaggerUi = require('swagger-ui-express')
 
 const StateStore = require('@adicitus/morrigan.utils.statestore')
+const DataStore  = require('@adicitus/morrigan.utils.datastore')
 
 const Logger =  require(`${__dirname}/logger`)
 
@@ -291,7 +292,7 @@ class Morrigan {
     /**
      * Starts this server instance.
      * 
-     * This will cause the server to attempt a connection to the configured MongoDB instance.
+     * This will cause the server to attempt a connection with the configured MongoDB connection string.
      * 
      * If the connection succeeds, all loaded components will be configured using their .setup method.
      * 
@@ -326,7 +327,6 @@ class Morrigan {
         const serverSettings = this.settings
         const app = this.app
         const log = this.log
-        const components = this.components
         const server = this.server
         const port = this.port
 
@@ -356,25 +356,19 @@ class Morrigan {
         }
 
         log("Establish connection to MongoDB...")
-        var database = null
-        const mongoClient = require('mongodb').MongoClient
-        let connectionPromise = mongoClient.connect(serverSettings.database.connectionString, { useUnifiedTopology: true }).then(async client => {
+
+        var datastore = null
+        try {
+            datastore = await DataStore(serverSettings.database.connectionString, { dbName: serverSettings.database.dbname })
             this._state = serverStates.starting_connected
             this._emitEvent('starting_connected')
 
             log('MongoDB server connected.')
             log(`Using DB '${serverSettings.database.dbname}'.`)
-            try {
-                database = client.db(serverSettings.database.dbname)
-                environment.db = database
-            } catch(e) {
-                log(`An error occurred while getting the databse ('${serverSettings.database.dbname}'): ${e}`, 'error')
-                throw new Error(`An error occurred while trying to access database: ('${serverSettings.database.dbname}')`, { cause: e })
-            }
 
-        })
-        
-        connectionPromise.catch(err => {
+            this._rootDataStore = datastore
+            environment.db = datastore
+        } catch (err) {
             this._state = serverStates.error
             this._emitEvent('error', err)
 
@@ -386,10 +380,9 @@ class Morrigan {
 
             this.error = err
             typeof callback === 'function' && callback(err)
-        })
+        }
 
-        await connectionPromise
-
+        
         if (environment.db === undefined) {
             log(`Connection to DB failed: ${this.error}`, 'error')
             return
@@ -439,6 +432,7 @@ class Morrigan {
             log(`Building environment for component '${c.name}' (${c.specification.endpointUrl})`, 'info')
             let env = Object.assign({}, environment)
             env.state = await this._rootStore.getStore(c.name, 'delegate')
+            env.db = await env.db.getDataStore(c.name, 'delegate')
 
             return [c.name, c.specification, router, env]
         })
@@ -464,7 +458,7 @@ class Morrigan {
 
         log('Setting up instance reporting...')
 
-        const instances = database.collection('morrigan.instances')
+        const instances = await this._rootDataStore.collection('morrigan.instances')
         this._instances = instances
 
         const selector = {id: serverInfo.id}
@@ -577,6 +571,9 @@ class Morrigan {
             this.log('Failed to update the instance record.', 'error')
             this.log(err)
         })
+
+        this.log("Closing connection to DB...")
+        await this._rootDataStore.discard()
 
         this._state = serverStates.stopped
         this._emitEvent('stopped')

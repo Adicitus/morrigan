@@ -148,7 +148,8 @@ describe("Morrigan server", async () => {
             let namespace = Object.keys(settings.components)[0]
             let component = settings.components[namespace]
 
-            assert(component.module.flags.databaseProvided)
+            assert(component.module.flags.datastoreProvided)
+            assert(component.module.flags.datastoreIsDelegated)
             assert(component.module.flags.serverInfoProvided)
             assert(component.module.flags.logFunctionProvided)
             assert(component.module.flags.stateStoreProvided)
