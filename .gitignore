@@ -1,6 +1,7 @@
 state
 log
 data
+.data
 node_modules
 server.settings.js
 cert.pem
